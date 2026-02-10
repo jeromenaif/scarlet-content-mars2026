@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scarlet Content Factory - Mars 2026</title>
+    <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="site-header">
+            <h1>🎨 Scarlet Content Factory</h1>
+            <p>Publications Mars 2026 • Planification & Feedback</p>
+            
+            <nav class="site-nav">
+                <a href="index.html" class="nav-btn active">📊 Vue d'ensemble</a>
+                <a href="#" class="nav-btn" onclick="exportAllPNG(); return false;">💾 Export All</a>
+            </nav>
+        </header>
+
+        <!-- Statistics -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <span class="stat-value" id="totalPosts">6</span>
+                <span class="stat-label">Publications</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="pilierBonMarche">2</span>
+                <span class="stat-label">Bon Marché</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="pilierQualite">1</span>
+                <span class="stat-label">Qualité</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="pilierTransparence">3</span>
+                <span class="stat-label">Transparence</span>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Tous (6)</button>
+            <button class="filter-btn" data-filter="Bon Marché">💰 Bon Marché (2)</button>
+            <button class="filter-btn" data-filter="Qualité">⭐ Qualité (1)</button>
+            <button class="filter-btn" data-filter="Transparence">🔍 Transparence (3)</button>
+            <button class="filter-btn" data-filter="pie_chart">📊 Pie Chart (1)</button>
+            <button class="filter-btn" data-filter="meme">😂 Meme (4)</button>
+            <button class="filter-btn" data-filter="checklist">✅ Checklist (1)</button>
+            <button class="filter-btn" data-filter="poll">📊 Poll (1)</button>
+        </div>
+
+        <!-- Posts Grid -->
+        <div class="posts-grid" id="postsGrid">
+            <!-- Posts will be dynamically generated here -->
+        </div>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+            <p>Made with ❤️ for Scarlet Content Factory</p>
+            <p style="margin-top: 8px; font-size: 12px;">
+                Format: 540×540px • Facebook & Instagram • Mars 2026
+            </p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/data.js"></script>
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            renderPosts();
+            setupFilters();
+            updateStats();
+        });
+
+        // Render posts grid
+        function renderPosts(filter = 'all') {
+            const grid = document.getElementById('postsGrid');
+            const posts = filter === 'all' 
+                ? POSTS_DATA 
+                : POSTS_DATA.filter(p => p.pilier === filter || p.format === filter);
+
+            grid.innerHTML = posts.map(post => `
+                <a href="post.html?id=${post.id}" class="post-card fade-in">
+                    <div class="post-thumbnail">
+                        ${getFormatEmoji(post.format)}
+                    </div>
+                    <div class="post-info">
+                        <div class="post-meta">
+                            <span class="badge badge-date">${post.date}/26</span>
+                            <span class="badge ${getPilierClass(post.pilier)}">${post.pilier}</span>
+                            <span class="badge badge-format">${post.formatLabel}</span>
+                        </div>
+                        <div class="post-theme">${post.theme}</div>
+                        <div class="post-caption">${post.captions.fr}</div>
+                    </div>
+                </a>
+            `).join('');
+        }
+
+        // Setup filter buttons
+        function setupFilters() {
+            const buttons = document.querySelectorAll('.filter-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    // Update active state
+                    buttons.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    // Filter posts
+                    const filter = btn.dataset.filter;
+                    renderPosts(filter);
+                });
+            });
+        }
+
+        // Update statistics
+        function updateStats() {
+            const stats = {
+                total: POSTS_DATA.length,
+                bonMarche: POSTS_DATA.filter(p => p.pilier === 'Bon Marché').length,
+                qualite: POSTS_DATA.filter(p => p.pilier === 'Qualité').length,
+                transparence: POSTS_DATA.filter(p => p.pilier === 'Transparence').length
+            };
+
+            document.getElementById('totalPosts').textContent = stats.total;
+            document.getElementById('pilierBonMarche').textContent = stats.bonMarche;
+            document.getElementById('pilierQualite').textContent = stats.qualite;
+            document.getElementById('pilierTransparence').textContent = stats.transparence;
+        }
+
+        // Helper functions
+        function getFormatEmoji(format) {
+            const emojis = {
+                'pie_chart': '📊',
+                'meme': '😂',
+                'checklist': '✅',
+                'poll': '📊'
+            };
+            return emojis[format] || '📄';
+        }
+
+        function getPilierClass(pilier) {
+            const classes = {
+                'Bon Marché': 'badge-green',
+                'Qualité': 'badge-blue',
+                'Transparence': 'badge-yellow'
+            };
+            return classes[pilier] || 'badge-format';
+        }
+
+        // Export all posts (placeholder)
+        function exportAllPNG() {
+            alert('Fonctionnalité à venir : Export de tous les visuels en PNG');
+            // TODO: Implement bulk export
+        }
+    </script>
+</body>
+</html>

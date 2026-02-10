@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post - Scarlet Content Factory</title>
+    <link rel="stylesheet" href="assets/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* Post Detail Specific Styles */
+        .post-detail {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .back-nav {
+            margin-bottom: 30px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 540px;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .detail-sidebar {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            height: fit-content;
+        }
+
+        .detail-sidebar h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .lang-toggle {
+            margin: 20px 0;
+        }
+
+        .lang-toggle label {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .lang-btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: all 0.2s;
+        }
+
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .lang-btn.active {
+            background: #E61F13;
+            font-weight: 600;
+        }
+
+        .caption-box {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #E61F13;
+        }
+
+        .caption-box h4 {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .caption-box p {
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        /* Editable Caption */
+        .caption-editable {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #E61F13;
+        }
+
+        .caption-editable h4 {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .caption-textarea {
+            width: 100%;
+            min-height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+            color: white;
+            font-size: 14px;
+            line-height: 1.6;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.2s;
+        }
+
+        .caption-textarea:focus {
+            outline: none;
+            border-color: #E61F13;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .edit-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: normal;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        /* Editable Visual Text */
+        .editable-text {
+            cursor: text;
+            position: relative;
+            padding: 2px 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .editable-text:hover {
+            background: rgba(230, 31, 19, 0.1);
+            outline: 2px dashed rgba(230, 31, 19, 0.3);
+        }
+
+        .editable-text:focus {
+            outline: 2px solid #E61F13;
+            background: rgba(230, 31, 19, 0.05);
+        }
+
+        .visual-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 20px;
+        }
+
+        /* Visual Templates */
+        .visual {
+            width: 540px;
+            height: 540px;
+            background: #E61F13;
+            border-radius: 16px;
+            padding: 30px;
+            position: relative;
+            font-family: Arial, sans-serif;
+            margin: 0 auto;
+        }
+
+        .visual-inner {
+            background: white;
+            border-radius: 12px;
+            height: 100%;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .visual-title {
+            color: #E61F13;
+            font-size: 22px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            line-height: 1.2;
+        }
+
+        .logo {
+            position: absolute;
+            bottom: 15px;
+            right: 20px;
+            font-family: 'Arial Black', sans-serif;
+            font-size: 18px;
+            color: white;
+            font-weight: 900;
+        }
+
+        /* Pie Chart */
+        .pie-container {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            flex: 1;
+        }
+
+        .pie-chart {
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        .legend-text {
+            font-size: 14px;
+            color: #4D4D4D;
+        }
+
+        /* Checklist */
+        .check-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 12px 16px;
+            background: #F3F3F3;
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+
+        .check-box {
+            width: 28px;
+            height: 28px;
+            background: #2BA600;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .check-text {
+            font-size: 15px;
+            color: #000;
+        }
+
+        /* Poll */
+        .poll-question {
+            color: #E61F13;
+            font-size: 24px;
+            font-weight: 900;
+            text-align: center;
+            margin-bottom: 40px;
+            line-height: 1.3;
+        }
+
+        .poll-option {
+            padding: 20px 24px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .poll-option.opt1 {
+            background: #E8F5E9;
+            border: 3px solid #2BA600;
+        }
+
+        .poll-option.opt2 {
+            background: #FFF3E0;
+            border: 3px solid #FFB800;
+        }
+
+        /* Meme */
+        .meme-inner {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            border-radius: 12px;
+            background: white;
+        }
+
+        .meme-panel {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .meme-panel.top {
+            background: #f8f8f8;
+            border-bottom: 3px solid #ddd;
+        }
+
+        .meme-panel.bottom {
+            background: #fff;
+        }
+
+        .meme-emoji {
+            font-size: 60px;
+            margin-bottom: 10px;
+        }
+
+        .meme-text {
+            font-size: 18px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        /* Comments Section */
+        .comments-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-top: 40px;
+            border-left: 4px solid #E61F13;
+        }
+
+        .comments-section h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+            color: #E61F13;
+        }
+
+        .comments-intro {
+            background: rgba(46, 213, 115, 0.15);
+            border-left: 4px solid #2ed573;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .comments-grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        .feedback-guide {
+            background: rgba(13, 202, 240, 0.1);
+            border-left: 4px solid #0DCAF0;
+            padding: 20px;
+            border-radius: 12px;
+            height: fit-content;
+        }
+
+        .feedback-guide h4 {
+            font-size: 14px;
+            color: #0DCAF0;
+            margin-bottom: 12px;
+        }
+
+        .feedback-guide ul {
+            list-style: none;
+            padding-left: 0;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .feedback-guide li {
+            padding: 6px 0;
+            opacity: 0.9;
+        }
+
+        .tally-container-wrapper {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tally-iframe {
+            width: 100%;
+            height: 600px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+        }
+
+        @media (max-width: 900px) {
+            .comments-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 1100px) {
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .visual {
+                width: 100%;
+                max-width: 540px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="post-detail">
+            <!-- Header -->
+            <header class="site-header">
+                <h1 id="postTitle">🎨 Scarlet Content Factory</h1>
+                <p id="postSubtitle">Chargement...</p>
+                
+                <nav class="site-nav back-nav">
+                    <a href="index.html" class="nav-btn">← Retour à l'aperçu</a>
+                </nav>
+            </header>
+
+            <!-- Detail Grid -->
+            <div class="detail-grid">
+                <!-- Sidebar -->
+                <div class="detail-sidebar">
+                    <div id="postMeta"></div>
+                    
+                    <div class="lang-toggle">
+                        <label>Langue</label>
+                        <button class="lang-btn active" onclick="setLang('fr')">🇫🇷 Français</button>
+                        <button class="lang-btn" onclick="setLang('nl')">🇧🇪 Nederlands</button>
+                    </div>
+                </div>
+
+                <!-- Visual Panel -->
+                <div class="visual-panel">
+                    <div id="captionEditable"></div>
+                    <div id="visualContainer"></div>
+                    <button class="btn btn-primary" style="width: 100%; margin-top: 20px;" onclick="exportPNG()" id="exportBtn">
+                        💾 Exporter en PNG
+                    </button>
+                </div>
+            </div>
+
+            <!-- Comments Section -->
+            <div class="comments-section">
+                <h3>💬 Commentaires et Feedback</h3>
+                
+                <div class="comments-intro">
+                    <span>✨</span>
+                    <div><strong>Aucun compte requis !</strong> Remplissez simplement le formulaire ci-dessous.</div>
+                </div>
+
+                <div class="comments-grid">
+                    <!-- Feedback Guide -->
+                    <div class="feedback-guide">
+                        <h4>📝 Guide de Feedback</h4>
+                        <ul>
+                            <li>✅ <strong>Validation</strong><br>Cochez "Validé" si le post est OK</li>
+                            <li>🎨 <strong>Modifications visuelles</strong><br>Décrivez les changements souhaités (couleurs, tailles, mise en page)</li>
+                            <li>✍️ <strong>Corrections texte</strong><br>Signalez les typos, reformulations ou ajustements de caption</li>
+                            <li>💡 <strong>Suggestions</strong><br>Proposez des idées alternatives ou améliorations</li>
+                        </ul>
+                    </div>
+
+                    <!-- Tally Form -->
+                    <div class="tally-container-wrapper">
+                        <div id="tallyContainer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+            <p>Made with ❤️ for Scarlet Content Factory</p>
+            <p style="margin-top: 8px; font-size: 12px;">
+                Format: 540×540px • Facebook & Instagram • Mars 2026
+            </p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/data.js"></script>
+    <script src="assets/post-renderer.js"></script>
+</body>
+</html>
