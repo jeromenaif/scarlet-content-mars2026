@@ -193,37 +193,34 @@
                 return;
             }
 
-            // Construire le texte du copy visuel FR pour chaque post
+            // Construire le texte du copy visuel FR depuis post.data.fr
             function buildCopyFR(post) {
+                const d = post.data && post.data.fr;
+                if (!d) return '';
                 const parts = [];
 
-                if (post.memeData) {
-                    if (post.memeData.topText)    parts.push('↑ ' + post.memeData.topText);
-                    if (post.memeData.bottomText)  parts.push('↓ ' + post.memeData.bottomText);
+                // Meme : topText / bottomText
+                if (d.topText)    parts.push('↑ ' + d.topText);
+                if (d.bottomText) parts.push('↓ ' + d.bottomText);
+
+                // Pie Chart : chartTitle + légendes + %
+                if (d.chartTitle) parts.push(d.chartTitle);
+                if (d.legends && d.percentages) {
+                    d.legends.forEach((l, i) => {
+                        parts.push(`• ${l}: ${d.percentages[i]}%`);
+                    });
+                } else if (d.legends) {
+                    d.legends.forEach(l => parts.push(`• ${l}`));
                 }
-                if (post.pieChartData) {
-                    if (post.pieChartData.chartTitle) parts.push(post.pieChartData.chartTitle);
-                    if (post.pieChartData.segments)
-                        parts.push(post.pieChartData.segments.map(s => `• ${s.label}: ${s.value}%`).join('\n'));
-                    else if (post.pieChartData.legends)
-                        parts.push(post.pieChartData.legends.map(l => `• ${l}`).join('\n'));
-                }
-                if (post.checklistData) {
-                    if (post.checklistData.checklistTitle) parts.push(post.checklistData.checklistTitle);
-                    if (post.checklistData.items)
-                        parts.push(post.checklistData.items.map(i => `✓ ${i}`).join('\n'));
-                }
-                if (post.pollData) {
-                    if (post.pollData.question) parts.push(post.pollData.question);
-                    if (post.pollData.options)
-                        parts.push(post.pollData.options.map((o, i) => `Option ${i+1}: ${o}`).join('\n'));
-                }
-                // Fallback : champs génériques
-                if (parts.length === 0) {
-                    if (post.visualText)  parts.push(post.visualText);
-                    if (post.texteVisuel) parts.push(post.texteVisuel);
-                    if (post.title)       parts.push(post.title);
-                }
+
+                // Checklist : titre + items
+                if (d.checklistTitle) parts.push(d.checklistTitle);
+                if (d.items) d.items.forEach(i => parts.push(`✓ ${i}`));
+
+                // Poll : question + options
+                if (d.question) parts.push(d.question);
+                if (d.options)  d.options.forEach((o, i) => parts.push(`Option ${i+1}: ${o}`));
+
                 return parts.join('\n');
             }
 
