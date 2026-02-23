@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scarlet Content Factory - Mars 2026</title>
     <link rel="stylesheet" href="assets/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .nav-btn-excel {
+            background: #217346 !important;
+            color: white !important;
+            border-color: #1a5c38 !important;
+        }
+        .nav-btn-excel:hover {
+            background: #1a5c38 !important;
+            color: white !important;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -16,7 +28,8 @@
             <nav class="site-nav">
                 <a href="index.html" class="nav-btn active">📊 Vue d'ensemble</a>
                 <a href="generate.html" class="nav-btn">🤖 Générateur IA</a>
-                <a href="#" class="nav-btn" onclick="exportAllPNG(); return false;">💾 Export All</a>
+                <a href="#" class="nav-btn" onclick="exportAllPNG(); return false;">💾 Export All PNG</a>
+                <a href="#" class="nav-btn nav-btn-excel" onclick="exportTraductionExcel(); return false;">📋 Export Traduction NL</a>
             </nav>
         </header>
 
@@ -172,6 +185,88 @@
             alert('Fonctionnalité à venir : Export de tous les visuels en PNG');
             // TODO: Implement bulk export
         }
+
+        // ─── Export Excel pour traduction FR → NL ─────────────────────────────
+        function exportTraductionExcel() {
+            if (typeof XLSX === 'undefined') {
+                alert('❌ Librairie XLSX non chargée. Vérifie ta connexion internet.');
+                return;
+            }
+
+            // Construire le texte du copy visuel FR pour chaque post
+            function buildCopyFR(post) {
+                const parts = [];
+
+                if (post.memeData) {
+                    if (post.memeData.topText)    parts.push('↑ ' + post.memeData.topText);
+                    if (post.memeData.bottomText)  parts.push('↓ ' + post.memeData.bottomText);
+                }
+                if (post.pieChartData) {
+                    if (post.pieChartData.chartTitle) parts.push(post.pieChartData.chartTitle);
+                    if (post.pieChartData.segments)
+                        parts.push(post.pieChartData.segments.map(s => `• ${s.label}: ${s.value}%`).join('\n'));
+                    else if (post.pieChartData.legends)
+                        parts.push(post.pieChartData.legends.map(l => `• ${l}`).join('\n'));
+                }
+                if (post.checklistData) {
+                    if (post.checklistData.checklistTitle) parts.push(post.checklistData.checklistTitle);
+                    if (post.checklistData.items)
+                        parts.push(post.checklistData.items.map(i => `✓ ${i}`).join('\n'));
+                }
+                if (post.pollData) {
+                    if (post.pollData.question) parts.push(post.pollData.question);
+                    if (post.pollData.options)
+                        parts.push(post.pollData.options.map((o, i) => `Option ${i+1}: ${o}`).join('\n'));
+                }
+                // Fallback : champs génériques
+                if (parts.length === 0) {
+                    if (post.visualText)  parts.push(post.visualText);
+                    if (post.texteVisuel) parts.push(post.texteVisuel);
+                    if (post.title)       parts.push(post.title);
+                }
+                return parts.join('\n');
+            }
+
+            // Construire les lignes
+            const lignes = POSTS_DATA.map((post, index) => ({
+                'N°':            index + 1,
+                'Date':          post.date ? `${post.date}/03/26` : '',
+                'Format':        post.formatLabel || post.format || '',
+                'Pilier':        post.pilier || '',
+                'Caption FR':    (post.captions && post.captions.fr) || post.captionFR || '',
+                'Caption NL':    (post.captions && post.captions.nl) || '',
+                'Copy FR':       buildCopyFR(post),
+                'Copy NL':       '',
+                'Commentaires':  post.commentaires || post.notes || post.rationale || '',
+                'VISU':          post.formatLabel || post.format || ''
+            }));
+
+            // Créer le workbook
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(lignes, {
+                header: ['N°', 'Date', 'Format', 'Pilier', 'Caption FR', 'Caption NL', 'Copy FR', 'Copy NL', 'Commentaires', 'VISU']
+            });
+
+            // Largeurs des colonnes
+            ws['!cols'] = [
+                { wch: 4  },  // N°
+                { wch: 12 },  // Date
+                { wch: 12 },  // Format
+                { wch: 14 },  // Pilier
+                { wch: 55 },  // Caption FR
+                { wch: 55 },  // Caption NL  ← à remplir
+                { wch: 60 },  // Copy FR
+                { wch: 60 },  // Copy NL     ← à remplir
+                { wch: 40 },  // Commentaires
+                { wch: 14 },  // VISU
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, 'Traduction FR-NL');
+
+            const mois = 'Mars_2026';
+            XLSX.writeFile(wb, `Scarlet_Traduction_${mois}.xlsx`);
+        }
+
     </script>
 </body>
 </html>
