@@ -447,12 +447,15 @@ async function callClaudeAPI(prompt) {
         })
     });
     
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Erreur API');
+    const data = await response.json();
+    
+    if (!response.ok || data.error) {
+        throw new Error(`Erreur API (${response.status}): ${JSON.stringify(data.error || data)}`);
     }
     
-    const data = await response.json();
+    if (!data.content || !data.content[0]) {
+        throw new Error(`Réponse inattendue du serveur: ${JSON.stringify(data)}`);
+    }
     const content = data.content[0].text;
     
     // Extract JSON from response
