@@ -4,59 +4,18 @@
 let currentMode = null;
 let generatedPosts = [];
 
+// Cloudflare Worker proxy URL (clé API sécurisée côté serveur)
+const PROXY_URL = 'https://scarlet-proxy.naifjerome.workers.dev';
+
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
-    checkApiKeyStatus();
-    loadSavedApiKey();
-});
-
-// API Key Management
-function saveApiKey() {
-    const apiKey = document.getElementById('apiKeyInput').value.trim();
-    
-    if (!apiKey) {
-        alert('⚠️ Veuillez entrer une clé API');
-        return;
-    }
-    
-    if (!apiKey.startsWith('sk-ant-')) {
-        alert('⚠️ Format de clé invalide. La clé doit commencer par "sk-ant-"');
-        return;
-    }
-    
-    localStorage.setItem('anthropic_api_key', apiKey);
-    checkApiKeyStatus();
-    alert('✅ Clé API enregistrée avec succès !');
-}
-
-function loadSavedApiKey() {
-    const savedKey = localStorage.getItem('anthropic_api_key');
-    if (savedKey) {
-        document.getElementById('apiKeyInput').value = savedKey;
-    }
-}
-
-function checkApiKeyStatus() {
-    const apiKey = localStorage.getItem('anthropic_api_key');
+    // API is now handled by Cloudflare Worker - always configured
     const statusElement = document.getElementById('apiStatus');
-    
-    if (apiKey) {
+    if (statusElement) {
         statusElement.className = 'api-status configured';
         statusElement.innerHTML = '✅ API configurée';
-    } else {
-        statusElement.className = 'api-status not-configured';
-        statusElement.innerHTML = '❌ API non configurée';
     }
-}
-
-function getApiKey() {
-    const apiKey = localStorage.getItem('anthropic_api_key');
-    if (!apiKey) {
-        alert('⚠️ Veuillez configurer votre clé API Anthropic d\'abord');
-        return null;
-    }
-    return apiKey;
-}
+});
 
 // Mode Selection
 function selectMode(mode) {
@@ -210,9 +169,6 @@ function showGenerationForm(mode) {
 
 // Generate Full Month
 async function generateFull() {
-    const apiKey = getApiKey();
-    if (!apiKey) return;
-    
     const month = document.getElementById('monthSelect').value;
     const postCount = parseInt(document.getElementById('postCount').value);
     const options = {
@@ -232,7 +188,7 @@ async function generateFull() {
         const prompt = buildFullGenerationPrompt(month, postCount, options, insights);
         
         // Call API
-        const result = await callClaudeAPI(apiKey, prompt);
+        const result = await callClaudeAPI(prompt);
         
         // Parse and display results
         displayGeneratedPosts(result, 'full');
@@ -244,9 +200,6 @@ async function generateFull() {
 
 // Generate Ideation
 async function generateIdeation() {
-    const apiKey = getApiKey();
-    if (!apiKey) return;
-    
     const theme = document.getElementById('themeInput').value.trim();
     if (!theme) {
         alert('⚠️ Veuillez entrer un thème');
@@ -260,7 +213,7 @@ async function generateIdeation() {
     try {
         const insights = analyzeHistory();
         const prompt = buildIdeationPrompt(theme, pilier, insights);
-        const result = await callClaudeAPI(apiKey, prompt);
+        const result = await callClaudeAPI(prompt);
         displayGeneratedPosts(result, 'ideation');
     } catch (error) {
         showError(`Erreur lors de la génération: ${error.message}`);
@@ -269,9 +222,6 @@ async function generateIdeation() {
 
 // Generate Improvement
 async function generateImprovement() {
-    const apiKey = getApiKey();
-    if (!apiKey) return;
-    
     const postId = parseInt(document.getElementById('postSelect').value);
     const post = POSTS_DATA.find(p => p.id === postId);
     
@@ -286,7 +236,7 @@ async function generateImprovement() {
     try {
         const insights = analyzeHistory();
         const prompt = buildImprovementPrompt(post, improvements, insights);
-        const result = await callClaudeAPI(apiKey, prompt);
+        const result = await callClaudeAPI(prompt);
         displayGeneratedPosts(result, 'improve');
     } catch (error) {
         showError(`Erreur lors de la génération: ${error.message}`);
@@ -340,9 +290,9 @@ HISTORIQUE DES PERFORMANCES:
 ${insights.insights}
 
 LES 3 PILIERS SCARLET (à équilibrer):
-1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher"
-2. QUALITÉ: "Réseau Proximus, prix Scarlet" / "Ça marche, point barre"
-3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / "Ce que vous voyez = ce que vous payez"
+1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher" / "Tu paies ce dont tu as besoin"
+2. QUALITÉ: "Ça marche, point barre" / "Un vrai service client"
+3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / L'offre est simple, lisible, sans surprise tarifaire
 
 FORMATS DISPONIBLES:
 - pie_chart (Camembert avec légendes)
@@ -354,7 +304,13 @@ RÈGLES ABSOLUES:
 - JAMAIS utiliser le mot "mais"
 - Ton chouette et léger (jamais corporate)
 - Belge et proche (comme un pote qui donne un bon plan)
-- JAMAIS mentionner la 5G, Proximus directement, ou prétendre être le moins cher
+- JAMAIS mentionner la 5G, Proximus, ou prétendre être le moins cher
+- JAMAIS utiliser "Ce que tu vois = ce que tu paies" → utiliser "Tu paies ce dont tu as besoin"
+- JAMAIS "data illimitées" dans un post générique (seulement sur un abonnement spécifique)
+- JAMAIS "Ton prix ? Fixe" → utiliser "Ton prix ? Stable"
+- JAMAIS prétendre que tout est compris
+- Tout argument doit être 100% défendable pour Scarlet (ex: ne pas dire que le WiFi est plus simple si ce n'est pas le cas)
+- La transparence Scarlet = clarté de l'offre tarifaire, PAS la longueur des contrats
 
 Génère ${postCount} concepts de posts complets au format JSON suivant:
 
@@ -390,9 +346,15 @@ THÈME DEMANDÉ: ${theme}
 ${pilierFilter}
 
 LES 3 PILIERS SCARLET:
-1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher"
-2. QUALITÉ: "Réseau Proximus, prix Scarlet" / "Ça marche, point barre"
-3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / "Ce que vous voyez = ce que vous payez"
+1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher" / "Tu paies ce dont tu as besoin"
+2. QUALITÉ: "Ça marche, point barre" / "Un vrai service client"
+3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / L'offre est simple, lisible, sans surprise tarifaire
+
+RÈGLES ABSOLUES:
+- JAMAIS "mais", "Ce que tu vois = ce que tu paies", "data illimitées" en générique, "Ton prix ? Fixe"
+- JAMAIS mentionner la 5G, Proximus, ou prétendre être le moins cher
+- Tout argument doit être 100% défendable pour Scarlet spécifiquement
+- Ton chouette, léger, belge et proche
 
 HISTORIQUE:
 ${insights.insights}
@@ -468,14 +430,12 @@ Génère 3 variantes au format JSON suivant:
 IMPORTANT: Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
 }
 
-// Call Claude API
-async function callClaudeAPI(apiKey, prompt) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+// Call Claude API via Cloudflare Worker proxy
+async function callClaudeAPI(prompt) {
+    const response = await fetch(PROXY_URL, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
