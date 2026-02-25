@@ -53,12 +53,17 @@ function showGenerationForm(mode) {
                     </div>
                     
                     <div class="form-group">
-                        <label>Nombre de posts</label>
-                        <select class="form-input" id="postCount">
-                            <option value="4">4 posts</option>
-                            <option value="6" selected>6 posts</option>
-                            <option value="8">8 posts</option>
-                        </select>
+                        <label>Nombre de posts (entre 1 et 15)</label>
+                        <input 
+                            type="number" 
+                            class="form-input" 
+                            id="postCount"
+                            value="6"
+                            min="1"
+                            max="15"
+                            placeholder="Ex: 6"
+                            oninput="updateGenerateButton()"
+                        >
                     </div>
                     
                     <div class="form-group">
@@ -83,8 +88,8 @@ function showGenerationForm(mode) {
                         </div>
                     </div>
                     
-                    <button class="btn btn-primary" onclick="generateFull()">
-                        🚀 Générer ${document.getElementById('postCount')?.value || 6} posts
+                    <button class="btn btn-primary" id="generateBtn" onclick="generateFull()">
+                        🚀 Générer 6 posts
                     </button>
                 </div>
             `;
@@ -167,10 +172,32 @@ function showGenerationForm(mode) {
     formsContainer.innerHTML = formHTML;
 }
 
+// Update generate button label dynamically
+function updateGenerateButton() {
+    const input = document.getElementById('postCount');
+    const btn = document.getElementById('generateBtn');
+    if (!input || !btn) return;
+    
+    const val = parseInt(input.value);
+    if (val >= 1 && val <= 15) {
+        btn.textContent = `🚀 Générer ${val} post${val > 1 ? 's' : ''}`;
+        btn.disabled = false;
+    } else {
+        btn.textContent = '⚠️ Entre 1 et 15 posts';
+        btn.disabled = true;
+    }
+}
+
 // Generate Full Month
 async function generateFull() {
+    const postCountInput = document.getElementById('postCount');
+    const postCount = parseInt(postCountInput.value);
+    
+    if (!postCount || postCount < 1 || postCount > 15) {
+        alert('⚠️ Veuillez entrer un nombre de posts entre 1 et 15');
+        return;
+    }
     const month = document.getElementById('monthSelect').value;
-    const postCount = parseInt(document.getElementById('postCount').value);
     const options = {
         analyzeHistory: document.getElementById('analyzeHistory').checked,
         belgianTrends: document.getElementById('belgianTrends').checked,
