@@ -1,18 +1,58 @@
 // AI Generator Script for Scarlet Content Factory
 // Using Anthropic API (Claude)
-// Version 2.0 - Avec historique et export Excel
+// Version 4.0 - Chargement dynamique du FEEDBACK_LOG.md depuis GitHub
 
 let currentMode = null;
 let generatedPosts = [];
+let SCARLET_CONTEXT = ''; // Sera chargé dynamiquement
 
 // Cloudflare Worker proxy URL (clé API sécurisée côté serveur)
 const PROXY_URL = 'https://scarlet-proxy.naifjerome.workers.dev';
 
+// URL du FEEDBACK_LOG.md sur GitHub (raw content)
+// IMPORTANT: Adapter cette URL à ton repo GitHub
+const FEEDBACK_LOG_URL = 'https://raw.githubusercontent.com/jeromenaif/scarlet-content-mars2026/main/FEEDBACK_LOG.md';
+
 // Storage key for localStorage
 const STORAGE_KEY = 'scarlet_generated_posts_history';
 
-// Initialize page
-document.addEventListener('DOMContentLoaded', () => {
+// Cache pour le FEEDBACK_LOG (évite de recharger à chaque action)
+const FEEDBACK_CACHE_KEY = 'scarlet_feedback_log_cache';
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 heure
+
+// Fallback context si le chargement échoue
+const FALLBACK_CONTEXT = `
+## LES 3 PILIERS SCARLET
+
+1. **BON MARCHÉ** : "Pourquoi payer plus?" / "Smart et pas cher" / "Tu paies ce dont tu as besoin"
+2. **QUALITÉ** : "Ça marche, point barre" / "Un vrai service client"
+3. **TRANSPARENCE** : "Il n'y a pas de mais chez Scarlet" / L'offre est simple, lisible, sans surprise tarifaire
+
+## RÈGLES ABSOLUES
+- JAMAIS utiliser le mot "mais"
+- JAMAIS mentionner la 5G, Proximus, ou prétendre être le moins cher
+- JAMAIS "Ce que tu vois = ce que tu paies" → utiliser "Tu paies ce dont tu as besoin"
+- JAMAIS "data illimitées" en générique
+- Ton chouette, léger, belge et proche
+
+## FORMATS DISPONIBLES
+- meme (meilleur performer ~4%)
+- poll (très bon ~4%)
+- pie_chart (bon ~2%)
+- checklist (modéré ~0.7%)
+
+## OBJECTIFS MÉDIA
+- REACH : pour événements calendaires, brand awareness
+- ENGAGEMENT : pour memes comportementaux, polls, posts interactifs
+- Ratio recommandé : 60% Engagement / 40% Reach
+`;
+
+// ==================== INITIALIZATION ====================
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Show loading state for context
+    updateContextStatus('loading');
+    
     // API is now handled by Cloudflare Worker - always configured
     const statusElement = document.getElementById('apiStatus');
     if (statusElement) {
@@ -20,9 +60,137 @@ document.addEventListener('DOMContentLoaded', () => {
         statusElement.innerHTML = '✅ API configurée';
     }
     
+    // Load FEEDBACK_LOG dynamically
+    await loadFeedbackLog();
+    
     // Load history count
     updateHistoryBadge();
 });
+
+// ==================== DYNAMIC FEEDBACK_LOG LOADING ====================
+
+async function loadFeedbackLog() {
+    try {
+        // Check cache first
+        const cached = getCachedFeedbackLog();
+        if (cached) {
+            SCARLET_CONTEXT = cached;
+            updateContextStatus('cached');
+            console.log('📋 FEEDBACK_LOG chargé depuis le cache');
+            return;
+        }
+        
+        // Fetch from GitHub
+        console.log('📥 Chargement du FEEDBACK_LOG depuis GitHub...');
+        const response = await fetch(FEEDBACK_LOG_URL, {
+            cache: 'no-store' // Force fresh fetch
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const markdown = await response.text();
+        
+        // Store in context
+        SCARLET_CONTEXT = markdown;
+        
+        // Cache it
+        cacheFeedbackLog(markdown);
+        
+        updateContextStatus('loaded');
+        console.log('✅ FEEDBACK_LOG chargé avec succès depuis GitHub');
+        
+    } catch (error) {
+        console.error('❌ Erreur chargement FEEDBACK_LOG:', error);
+        
+        // Use fallback
+        SCARLET_CONTEXT = FALLBACK_CONTEXT;
+        updateContextStatus('fallback');
+        console.log('⚠️ Utilisation du contexte de secours');
+    }
+}
+
+function getCachedFeedbackLog() {
+    try {
+        const cached = localStorage.getItem(FEEDBACK_CACHE_KEY);
+        if (!cached) return null;
+        
+        const { content, timestamp } = JSON.parse(cached);
+        const age = Date.now() - timestamp;
+        
+        if (age > CACHE_DURATION_MS) {
+            // Cache expired
+            localStorage.removeItem(FEEDBACK_CACHE_KEY);
+            return null;
+        }
+        
+        return content;
+    } catch (e) {
+        return null;
+    }
+}
+
+function cacheFeedbackLog(content) {
+    try {
+        localStorage.setItem(FEEDBACK_CACHE_KEY, JSON.stringify({
+            content,
+            timestamp: Date.now()
+        }));
+    } catch (e) {
+        console.warn('Impossible de mettre en cache le FEEDBACK_LOG');
+    }
+}
+
+function updateContextStatus(status) {
+    // Create or update status indicator
+    let indicator = document.getElementById('contextStatus');
+    
+    if (!indicator) {
+        // Create indicator next to API status
+        const apiStatus = document.getElementById('apiStatus');
+        if (apiStatus) {
+            indicator = document.createElement('div');
+            indicator.id = 'contextStatus';
+            indicator.style.cssText = 'margin-top: 8px; font-size: 12px; padding: 6px 12px; border-radius: 6px;';
+            apiStatus.parentNode.insertBefore(indicator, apiStatus.nextSibling);
+        }
+    }
+    
+    if (indicator) {
+        switch(status) {
+            case 'loading':
+                indicator.innerHTML = '⏳ Chargement des règles...';
+                indicator.style.background = 'rgba(255, 193, 7, 0.2)';
+                indicator.style.color = '#ffc107';
+                break;
+            case 'loaded':
+                indicator.innerHTML = '📋 Règles à jour (GitHub)';
+                indicator.style.background = 'rgba(40, 167, 69, 0.2)';
+                indicator.style.color = '#28a745';
+                break;
+            case 'cached':
+                indicator.innerHTML = '📋 Règles chargées (cache)';
+                indicator.style.background = 'rgba(23, 162, 184, 0.2)';
+                indicator.style.color = '#17a2b8';
+                break;
+            case 'fallback':
+                indicator.innerHTML = '⚠️ Règles de secours';
+                indicator.style.background = 'rgba(255, 107, 107, 0.2)';
+                indicator.style.color = '#ff6b6b';
+                break;
+        }
+    }
+}
+
+// Force refresh of FEEDBACK_LOG
+async function refreshFeedbackLog() {
+    localStorage.removeItem(FEEDBACK_CACHE_KEY);
+    updateContextStatus('loading');
+    await loadFeedbackLog();
+}
+
+// ==================== REST OF THE CODE (unchanged logic) ====================
 
 // Get dynamic month options based on current date
 function getMonthOptions() {
@@ -131,9 +299,14 @@ function showGenerationForm(mode) {
                         </div>
                     </div>
                     
-                    <button class="btn btn-primary" id="generateBtn" onclick="generateFull()">
-                        🚀 Générer 6 posts
-                    </button>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" id="generateBtn" onclick="generateFull()">
+                            🚀 Générer 6 posts
+                        </button>
+                        <button class="btn btn-secondary" onclick="refreshFeedbackLog()" title="Recharger les règles depuis GitHub">
+                            🔄 Actualiser règles
+                        </button>
+                    </div>
                 </div>
             `;
             break;
@@ -374,10 +547,10 @@ function exportHistoryToExcel(index) {
 // ==================== EXCEL EXPORT ====================
 
 function exportToExcel(posts, monthLabel) {
-    // Create workbook data
+    // Create workbook data - with objectif_media
     const headers = [
-        'N°', 'Date', 'Thème', 'Format', 'Pilier', 'Angle/Reasoning',
-        'Caption FR', 'Caption NL', 'Texte visuel FR', 'Texte visuel NL', 'Brief visuel'
+        'N°', 'Date', 'Thème', 'Format', 'Pilier', 'Objectif Média', 'Justification Objectif',
+        'Angle/Reasoning', 'Caption FR', 'Caption NL', 'Texte visuel FR', 'Texte visuel NL', 'Brief visuel'
     ];
     
     const rows = posts.map((post, idx) => {
@@ -434,6 +607,8 @@ function exportToExcel(posts, monthLabel) {
             post.theme || '',
             post.format || '',
             post.pilier || '',
+            post.objectif_media || '',
+            post.objectif_justification || '',
             post.angle || post.reasoning || post.variation || '',
             post.captions?.fr || '',
             post.captions?.nl || '',
@@ -594,41 +769,31 @@ function analyzeHistory() {
     };
 }
 
-// Build Prompts
+// ==================== PROMPT BUILDERS ====================
+
 function buildFullGenerationPrompt(month, postCount, options, insights) {
     return `Tu es un expert en création de contenu pour Scarlet, opérateur télécom belge.
 
-CONTEXTE:
+## RÈGLES ET CONTEXTE SCARLET (FEEDBACK_LOG)
+${SCARLET_CONTEXT}
+
+## CONTEXTE DE GÉNÉRATION
 - Mois à générer: ${month}
 - Nombre de posts: ${postCount}
 - Analyser historique: ${options.analyzeHistory ? 'Oui' : 'Non'}
 - Tendances belges: ${options.belgianTrends ? 'Oui' : 'Non'}
 
-HISTORIQUE DES PERFORMANCES:
+## HISTORIQUE DES PERFORMANCES
 ${insights.insights}
 
-LES 3 PILIERS SCARLET (à équilibrer):
-1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher" / "Tu paies ce dont tu as besoin"
-2. QUALITÉ: "Ça marche, point barre" / "Un vrai service client"
-3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / L'offre est simple, lisible, sans surprise tarifaire
+## INSTRUCTIONS SPÉCIFIQUES
 
-FORMATS DISPONIBLES:
-- pie_chart (Camembert avec légendes)
-- meme (Format 2 panels avec emojis)
-- checklist (Liste à cocher)
-- poll (Question avec 2 options)
+1. **Ratio objectifs média** : Sur ${postCount} posts, environ ${Math.round(postCount * 0.6)} en ENGAGEMENT et ${Math.round(postCount * 0.4)} en REACH
+2. **Varier les formats** : Privilégier meme et poll (meilleurs performers)
+3. **Éviter les répétitions** : Ne pas réutiliser les thèmes récents
+4. **Posts calendaires** : Si événement du mois, ajouter un angle comportemental
 
-RÈGLES ABSOLUES:
-- JAMAIS utiliser le mot "mais"
-- Ton chouette et léger (jamais corporate)
-- Belge et proche (comme un pote qui donne un bon plan)
-- JAMAIS mentionner la 5G, Proximus, ou prétendre être le moins cher
-- JAMAIS utiliser "Ce que tu vois = ce que tu paies" → utiliser "Tu paies ce dont tu as besoin"
-- JAMAIS "data illimitées" dans un post générique (seulement sur un abonnement spécifique)
-- JAMAIS "Ton prix ? Fixe" → utiliser "Ton prix ? Stable"
-- JAMAIS prétendre que tout est compris
-- Tout argument doit être 100% défendable pour Scarlet (ex: ne pas dire que le WiFi est plus simple si ce n'est pas le cas)
-- La transparence Scarlet = clarté de l'offre tarifaire, PAS la longueur des contrats
+## FORMAT DE SORTIE
 
 Génère ${postCount} concepts de posts complets au format JSON suivant:
 
@@ -639,20 +804,26 @@ Génère ${postCount} concepts de posts complets au format JSON suivant:
     "format": "meme|pie_chart|checklist|poll",
     "pilier": "Bon Marché|Qualité|Transparence",
     "theme": "Thème court et accrocheur",
+    "objectif_media": "REACH|ENGAGEMENT",
+    "objectif_justification": "Pourquoi cet objectif pour ce contenu (1 phrase)",
     "data": {
       "fr": { ... },
       "nl": { ... }
     },
     "captions": {
-      "fr": "Caption FR (2-3 phrases max)",
-      "nl": "Caption NL (2-3 phrases max)"
+      "fr": "Caption FR (2-3 phrases max, avec CTA adapté à l'objectif)",
+      "nl": "Caption NL (2-3 phrases max, avec CTA adapté à l'objectif)"
     },
-    "reasoning": "Pourquoi ce concept va performer"
+    "reasoning": "Pourquoi ce concept va performer + KPI attendu"
   }
 ]
 \`\`\`
 
-IMPORTANT: Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
+IMPORTANT: 
+- Retourne UNIQUEMENT le JSON, sans texte avant ou après.
+- Pour les posts ENGAGEMENT : inclure un CTA interactif (question, tag un ami, etc.)
+- Pour les posts REACH : inclure un CTA plus soft (découvrir, visiter, etc.)
+- RESPECTE TOUTES LES RÈGLES du FEEDBACK_LOG ci-dessus`;
 }
 
 function buildIdeationPrompt(theme, pilier, insights) {
@@ -660,25 +831,22 @@ function buildIdeationPrompt(theme, pilier, insights) {
     
     return `Tu es un expert en création de contenu pour Scarlet, opérateur télécom belge.
 
-THÈME DEMANDÉ: ${theme}
+## RÈGLES ET CONTEXTE SCARLET (FEEDBACK_LOG)
+${SCARLET_CONTEXT}
+
+## THÈME DEMANDÉ: ${theme}
 ${pilierFilter}
 
-LES 3 PILIERS SCARLET:
-1. BON MARCHÉ: "Pourquoi payer plus?" / "Smart et pas cher" / "Tu paies ce dont tu as besoin"
-2. QUALITÉ: "Ça marche, point barre" / "Un vrai service client"
-3. TRANSPARENCE: "Il n'y a pas de mais chez Scarlet" / L'offre est simple, lisible, sans surprise tarifaire
-
-RÈGLES ABSOLUES:
-- JAMAIS "mais", "Ce que tu vois = ce que tu paies", "data illimitées" en générique, "Ton prix ? Fixe"
-- JAMAIS mentionner la 5G, Proximus, ou prétendre être le moins cher
-- Tout argument doit être 100% défendable pour Scarlet spécifiquement
-- Ton chouette, léger, belge et proche
-
-HISTORIQUE:
+## HISTORIQUE
 ${insights.insights}
 
+## INSTRUCTIONS
+
 Propose 3 angles créatifs DIFFÉRENTS pour traiter ce thème.
-Pour chaque angle, fournis un concept de post complet.
+Pour chaque angle :
+- Varie le format (meme, poll, checklist, pie_chart)
+- Indique l'objectif média recommandé (REACH ou ENGAGEMENT)
+- Justifie pourquoi cet angle va performer
 
 Génère 3 concepts au format JSON suivant:
 
@@ -689,6 +857,8 @@ Génère 3 concepts au format JSON suivant:
     "format": "meme|pie_chart|checklist|poll",
     "pilier": "Bon Marché|Qualité|Transparence",
     "theme": "Thème court",
+    "objectif_media": "REACH|ENGAGEMENT",
+    "objectif_justification": "Pourquoi cet objectif",
     "data": {
       "fr": { ... },
       "nl": { ... }
@@ -701,38 +871,49 @@ Génère 3 concepts au format JSON suivant:
 ]
 \`\`\`
 
-IMPORTANT: Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
+IMPORTANT: 
+- Retourne UNIQUEMENT le JSON, sans texte avant ou après.
+- RESPECTE TOUTES LES RÈGLES du FEEDBACK_LOG ci-dessus`;
 }
 
 function buildImprovementPrompt(post, improvements, insights) {
     return `Tu es un expert en création de contenu pour Scarlet, opérateur télécom belge.
 
-POST ACTUEL À AMÉLIORER:
+## RÈGLES ET CONTEXTE SCARLET (FEEDBACK_LOG)
+${SCARLET_CONTEXT}
+
+## POST ACTUEL À AMÉLIORER
 - Thème: ${post.theme}
 - Format: ${post.format}
 - Pilier: ${post.pilier}
 - Caption FR: ${post.captions.fr}
 
-AMÉLIORATIONS DEMANDÉES:
-${improvements.engagement ? '- Augmenter l\'engagement' : ''}
-${improvements.clarity ? '- Améliorer la clarté' : ''}
-${improvements.tone ? '- Ajuster le tone of voice' : ''}
+## AMÉLIORATIONS DEMANDÉES
+${improvements.engagement ? '- Augmenter l\'engagement (ajouter CTA interactif, question, etc.)' : ''}
+${improvements.clarity ? '- Améliorer la clarté (simplifier le message)' : ''}
+${improvements.tone ? '- Ajuster le tone of voice (plus belge, plus complice)' : ''}
 
-HISTORIQUE DES PERFORMANCES:
+## HISTORIQUE DES PERFORMANCES
 ${insights.insights}
 
+## INSTRUCTIONS
+
 Crée 3 VARIANTES AMÉLIORÉES de ce post.
-Garde le même format et pilier, mais propose des variations créatives.
+Pour chaque variante :
+- Indique l'objectif média recommandé
+- Explique ce qui change et pourquoi c'est mieux
 
 Génère 3 variantes au format JSON suivant:
 
 \`\`\`json
 [
   {
-    "variation": "Description de ce qui change",
+    "variation": "Description de ce qui change et pourquoi",
     "format": "${post.format}",
     "pilier": "${post.pilier}",
     "theme": "Thème (peut être légèrement modifié)",
+    "objectif_media": "REACH|ENGAGEMENT",
+    "objectif_justification": "Pourquoi cet objectif",
     "data": {
       "fr": { ... },
       "nl": { ... }
@@ -745,7 +926,9 @@ Génère 3 variantes au format JSON suivant:
 ]
 \`\`\`
 
-IMPORTANT: Retourne UNIQUEMENT le JSON, sans texte avant ou après.`;
+IMPORTANT: 
+- Retourne UNIQUEMENT le JSON, sans texte avant ou après.
+- RESPECTE TOUTES LES RÈGLES du FEEDBACK_LOG ci-dessus`;
 }
 
 // Call Claude API via Cloudflare Worker proxy
@@ -883,6 +1066,11 @@ function displayGeneratedPosts(posts, mode) {
             'Transparence': 'badge-yellow'
         }[post.pilier] || 'badge-format';
         
+        // Objectif média badge
+        const objectifBadge = post.objectif_media === 'ENGAGEMENT' 
+            ? '<span class="badge" style="background: #9b59b6; color: white;">💬 ENGAGEMENT</span>'
+            : '<span class="badge" style="background: #3498db; color: white;">🎯 REACH</span>';
+        
         return `
             <div class="preview-card">
                 <div class="preview-visual">${formatEmoji}</div>
@@ -891,8 +1079,10 @@ function displayGeneratedPosts(posts, mode) {
                         ${post.date ? `<span class="badge badge-date">${post.date}</span>` : ''}
                         <span class="badge ${pilierClass}">${post.pilier}</span>
                         <span class="badge badge-format">${post.format}</span>
+                        ${objectifBadge}
                     </div>
                     <div class="preview-theme">${post.theme}</div>
+                    ${post.objectif_justification ? `<div style="font-size: 11px; color: #95a5a6; margin-bottom: 6px;">📌 ${post.objectif_justification}</div>` : ''}
                     ${post.angle ? `<div style="font-size: 12px; color: #0DCAF0; margin-bottom: 8px;">💡 ${post.angle}</div>` : ''}
                     ${post.variation ? `<div style="font-size: 12px; color: #FFB800; margin-bottom: 8px;">✨ ${post.variation}</div>` : ''}
                     ${post.reasoning ? `<div style="font-size: 12px; color: #2ed573; margin-bottom: 8px;">🎯 ${post.reasoning}</div>` : ''}
@@ -934,7 +1124,7 @@ function displayGeneratedPosts(posts, mode) {
 // View Post Detail
 function viewPostDetail(index) {
     const post = generatedPosts[index];
-    alert(`Prévisualisation complète à venir !\n\nThème: ${post.theme}\nFormat: ${post.format}\nPilier: ${post.pilier}\n\nCaption FR:\n${post.captions.fr}`);
+    alert(`Prévisualisation complète à venir !\n\nThème: ${post.theme}\nFormat: ${post.format}\nPilier: ${post.pilier}\nObjectif: ${post.objectif_media || 'Non défini'}\n\nCaption FR:\n${post.captions.fr}`);
     // TODO: Create modal with full preview
 }
 
