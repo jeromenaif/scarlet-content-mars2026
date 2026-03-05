@@ -16,13 +16,78 @@
             background: #1a5c38 !important;
             color: white !important;
         }
+        /* Badge posts IA */
+        .ai-posts-badge {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .ai-posts-info {
+            background: linear-gradient(135deg, rgba(155, 89, 182, 0.1), rgba(142, 68, 173, 0.1));
+            border: 1px solid rgba(155, 89, 182, 0.3);
+            border-radius: 12px;
+            padding: 12px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .ai-posts-info-text {
+            color: #9b59b6;
+            font-size: 14px;
+        }
+        .ai-posts-info-text strong {
+            color: #8e44ad;
+        }
+        .btn-clear-ai {
+            background: rgba(231, 76, 60, 0.1);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-clear-ai:hover {
+            background: rgba(231, 76, 60, 0.2);
+        }
+        /* Badge sur les posts générés */
+        .post-card.generated {
+            border: 2px solid rgba(155, 89, 182, 0.4);
+        }
+        .post-card.generated::before {
+            content: '🤖 IA';
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            z-index: 10;
+        }
+        .post-card {
+            position: relative;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header class="site-header">
-            <h1>🎨 Scarlet Content Factory</h1>
+            <h1>🎨 Scarlet Content Factory <span id="aiPostsBadge"></span></h1>
             <p>Publications Mars 2026 • Planification & Feedback</p>
             
             <nav class="site-nav">
@@ -32,6 +97,9 @@
                 <a href="#" class="nav-btn nav-btn-excel" onclick="exportTraductionExcel(); return false;">📋 Export Traduction NL</a>
             </nav>
         </header>
+
+        <!-- AI Posts Info Banner (shown only if AI posts exist) -->
+        <div id="aiPostsInfoBanner" style="display: none;"></div>
 
         <!-- Hero CTA - AI Generator -->
         <div class="hero-cta">
@@ -69,15 +137,8 @@
         </div>
 
         <!-- Filters -->
-        <div class="filters">
-            <button class="filter-btn active" data-filter="all">Tous (6)</button>
-            <button class="filter-btn" data-filter="Bon Marché">💰 Bon Marché (2)</button>
-            <button class="filter-btn" data-filter="Qualité">⭐ Qualité (1)</button>
-            <button class="filter-btn" data-filter="Transparence">🔍 Transparence (3)</button>
-            <button class="filter-btn" data-filter="pie_chart">📊 Pie Chart (1)</button>
-            <button class="filter-btn" data-filter="meme">😂 Meme (4)</button>
-            <button class="filter-btn" data-filter="checklist">✅ Checklist (1)</button>
-            <button class="filter-btn" data-filter="poll">📊 Poll (1)</button>
+        <div class="filters" id="filtersContainer">
+            <!-- Filters will be dynamically generated -->
         </div>
 
         <!-- Posts Grid -->
@@ -96,62 +157,118 @@
 
     <!-- Scripts -->
     <script src="assets/data.js"></script>
+    <script src="assets/published-posts-loader.js"></script>
     <script>
         // Initialize page
         document.addEventListener('DOMContentLoaded', () => {
+            updateAIPostsBadge();
             renderPosts();
             setupFilters();
             updateStats();
         });
 
-        // Render posts grid
+        // Update AI posts badge and banner
+        function updateAIPostsBadge() {
+            const count = getPublishedPostsCount();
+            const badge = document.getElementById('aiPostsBadge');
+            const banner = document.getElementById('aiPostsInfoBanner');
+            
+            if (count > 0) {
+                badge.innerHTML = `<span class="ai-posts-badge">🤖 ${count} posts IA</span>`;
+                banner.style.display = 'block';
+                banner.innerHTML = `
+                    <div class="ai-posts-info">
+                        <span class="ai-posts-info-text">
+                            <strong>${count} posts générés par l'IA</strong> sont affichés dans cette vue.
+                            Ils sont stockés localement et ne modifient pas vos données de base.
+                        </span>
+                        <button class="btn-clear-ai" onclick="clearAllPublishedPosts()">
+                            🗑️ Retirer les posts IA
+                        </button>
+                    </div>
+                `;
+            } else {
+                badge.innerHTML = '';
+                banner.style.display = 'none';
+            }
+        }
+
+        // Render posts grid - NOW USES getAllPosts()
         function renderPosts(filter = 'all') {
             const grid = document.getElementById('postsGrid');
+            const allPosts = getAllPosts(); // ← CHANGED: Uses merged posts
+            
             const posts = filter === 'all' 
-                ? POSTS_DATA 
-                : POSTS_DATA.filter(p => p.pilier === filter || p.format === filter);
+                ? allPosts 
+                : allPosts.filter(p => p.pilier === filter || p.format === filter);
 
             grid.innerHTML = posts.map(post => `
-                <a href="post.html?id=${post.id}" class="post-card fade-in">
+                <a href="post.html?id=${post.id}" class="post-card fade-in ${post.isGenerated ? 'generated' : ''}">
                     <div class="post-thumbnail">
                         ${getFormatEmoji(post.format)}
                     </div>
                     <div class="post-info">
                         <div class="post-meta">
-                            <span class="badge badge-date">${post.date}/26</span>
+                            <span class="badge badge-date">${post.date || '??/??'}/26</span>
                             <span class="badge ${getPilierClass(post.pilier)}">${post.pilier}</span>
-                            <span class="badge badge-format">${post.formatLabel}</span>
+                            <span class="badge badge-format">${post.formatLabel || post.format}</span>
+                            ${post.objectif_media ? `<span class="badge" style="background: ${post.objectif_media === 'ENGAGEMENT' ? '#9b59b6' : '#3498db'}; color: white; font-size: 10px;">${post.objectif_media === 'ENGAGEMENT' ? '💬' : '🎯'}</span>` : ''}
                         </div>
                         <div class="post-theme">${post.theme}</div>
-                        <div class="post-caption">${post.captions.fr}</div>
+                        <div class="post-caption">${post.captions?.fr || ''}</div>
                     </div>
                 </a>
             `).join('');
         }
 
-        // Setup filter buttons
+        // Setup filter buttons - NOW USES getAllPosts()
         function setupFilters() {
-            const buttons = document.querySelectorAll('.filter-btn');
+            const allPosts = getAllPosts(); // ← CHANGED
+            const container = document.getElementById('filtersContainer');
+            
+            // Count by pilier and format
+            const counts = {
+                all: allPosts.length,
+                'Bon Marché': allPosts.filter(p => p.pilier === 'Bon Marché').length,
+                'Qualité': allPosts.filter(p => p.pilier === 'Qualité').length,
+                'Transparence': allPosts.filter(p => p.pilier === 'Transparence').length,
+                'pie_chart': allPosts.filter(p => p.format === 'pie_chart').length,
+                'meme': allPosts.filter(p => p.format === 'meme').length,
+                'checklist': allPosts.filter(p => p.format === 'checklist').length,
+                'poll': allPosts.filter(p => p.format === 'poll').length
+            };
+            
+            container.innerHTML = `
+                <button class="filter-btn active" data-filter="all">Tous (${counts.all})</button>
+                <button class="filter-btn" data-filter="Bon Marché">💰 Bon Marché (${counts['Bon Marché']})</button>
+                <button class="filter-btn" data-filter="Qualité">⭐ Qualité (${counts['Qualité']})</button>
+                <button class="filter-btn" data-filter="Transparence">🔍 Transparence (${counts['Transparence']})</button>
+                <button class="filter-btn" data-filter="pie_chart">📊 Pie Chart (${counts['pie_chart']})</button>
+                <button class="filter-btn" data-filter="meme">😂 Meme (${counts['meme']})</button>
+                <button class="filter-btn" data-filter="checklist">✅ Checklist (${counts['checklist']})</button>
+                <button class="filter-btn" data-filter="poll">📊 Poll (${counts['poll']})</button>
+            `;
+            
+            // Add event listeners
+            const buttons = container.querySelectorAll('.filter-btn');
             buttons.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    // Update active state
                     buttons.forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
-                    
-                    // Filter posts
-                    const filter = btn.dataset.filter;
-                    renderPosts(filter);
+                    renderPosts(btn.dataset.filter);
                 });
             });
         }
 
-        // Update statistics
+        // Update statistics - NOW USES getAllPosts()
         function updateStats() {
+            const allPosts = getAllPosts(); // ← CHANGED
+            
             const stats = {
-                total: POSTS_DATA.length,
-                bonMarche: POSTS_DATA.filter(p => p.pilier === 'Bon Marché').length,
-                qualite: POSTS_DATA.filter(p => p.pilier === 'Qualité').length,
-                transparence: POSTS_DATA.filter(p => p.pilier === 'Transparence').length
+                total: allPosts.length,
+                bonMarche: allPosts.filter(p => p.pilier === 'Bon Marché').length,
+                qualite: allPosts.filter(p => p.pilier === 'Qualité').length,
+                transparence: allPosts.filter(p => p.pilier === 'Transparence').length
             };
 
             document.getElementById('totalPosts').textContent = stats.total;
@@ -183,7 +300,6 @@
         // Export all posts (placeholder)
         function exportAllPNG() {
             alert('Fonctionnalité à venir : Export de tous les visuels en PNG');
-            // TODO: Implement bulk export
         }
 
         // ─── Export Excel pour traduction FR → NL ─────────────────────────────
@@ -193,17 +309,15 @@
                 return;
             }
 
-            // Construire le texte du copy visuel FR depuis post.data.fr
+            const allPosts = getAllPosts(); // ← CHANGED: Export all posts including AI generated
+
             function buildCopyFR(post) {
                 const d = post.data && post.data.fr;
                 if (!d) return '';
                 const parts = [];
 
-                // Meme : topText / bottomText
                 if (d.topText)    parts.push('↑ ' + d.topText);
                 if (d.bottomText) parts.push('↓ ' + d.bottomText);
-
-                // Pie Chart : chartTitle + légendes + %
                 if (d.chartTitle) parts.push(d.chartTitle);
                 if (d.legends && d.percentages) {
                     d.legends.forEach((l, i) => {
@@ -212,56 +326,49 @@
                 } else if (d.legends) {
                     d.legends.forEach(l => parts.push(`• ${l}`));
                 }
-
-                // Checklist : titre + items
                 if (d.checklistTitle) parts.push(d.checklistTitle);
                 if (d.items) d.items.forEach(i => parts.push(`✓ ${i}`));
-
-                // Poll : question + options
                 if (d.question) parts.push(d.question);
                 if (d.options)  d.options.forEach((o, i) => parts.push(`Option ${i+1}: ${o}`));
 
                 return parts.join('\n');
             }
 
-            // Construire les lignes
-            const lignes = POSTS_DATA.map((post, index) => ({
+            const lignes = allPosts.map((post, index) => ({
                 'N°':            index + 1,
                 'Date':          post.date ? `${post.date}/03/26` : '',
                 'Format':        post.formatLabel || post.format || '',
                 'Pilier':        post.pilier || '',
-                'Caption FR':    (post.captions && post.captions.fr) || post.captionFR || '',
+                'Objectif':      post.objectif_media || '',
+                'Source':        post.isGenerated ? '🤖 IA' : '📝 Manuel',
+                'Caption FR':    (post.captions && post.captions.fr) || '',
                 'Caption NL':    (post.captions && post.captions.nl) || '',
                 'Copy FR':       buildCopyFR(post),
                 'Copy NL':       '',
-                'Commentaires':  post.commentaires || post.notes || post.rationale || '',
-                'VISU':          post.formatLabel || post.format || ''
+                'Commentaires':  post.reasoning || post.notes || ''
             }));
 
-            // Créer le workbook
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.json_to_sheet(lignes, {
-                header: ['N°', 'Date', 'Format', 'Pilier', 'Caption FR', 'Caption NL', 'Copy FR', 'Copy NL', 'Commentaires', 'VISU']
+                header: ['N°', 'Date', 'Format', 'Pilier', 'Objectif', 'Source', 'Caption FR', 'Caption NL', 'Copy FR', 'Copy NL', 'Commentaires']
             });
 
-            // Largeurs des colonnes
             ws['!cols'] = [
-                { wch: 4  },  // N°
-                { wch: 12 },  // Date
-                { wch: 12 },  // Format
-                { wch: 14 },  // Pilier
-                { wch: 55 },  // Caption FR
-                { wch: 55 },  // Caption NL  ← à remplir
-                { wch: 60 },  // Copy FR
-                { wch: 60 },  // Copy NL     ← à remplir
-                { wch: 40 },  // Commentaires
-                { wch: 14 },  // VISU
+                { wch: 4  },
+                { wch: 12 },
+                { wch: 12 },
+                { wch: 14 },
+                { wch: 12 },
+                { wch: 10 },
+                { wch: 55 },
+                { wch: 55 },
+                { wch: 60 },
+                { wch: 60 },
+                { wch: 40 }
             ];
 
             XLSX.utils.book_append_sheet(wb, ws, 'Traduction FR-NL');
-
-            const mois = 'Mars_2026';
-            XLSX.writeFile(wb, `Scarlet_Traduction_${mois}.xlsx`);
+            XLSX.writeFile(wb, `Scarlet_Traduction_Export.xlsx`);
         }
 
     </script>
