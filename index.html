@@ -81,6 +81,38 @@
         .post-card {
             position: relative;
         }
+        /* Month selector */
+        .month-selector {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .month-selector label {
+            font-weight: 500;
+            color: var(--text-muted, #aaa);
+        }
+        .month-select {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .month-select:focus {
+            outline: none;
+            border-color: #e63946;
+        }
+        .month-count {
+            font-size: 13px;
+            color: var(--text-muted, #888);
+        }
     </style>
 </head>
 <body>
@@ -100,6 +132,15 @@
 
         <!-- AI Posts Info Banner (shown only if AI posts exist) -->
         <div id="aiPostsInfoBanner" style="display: none;"></div>
+
+        <!-- Month Selector -->
+        <div class="month-selector">
+            <label for="monthSelect">📅 Mois :</label>
+            <select id="monthSelect" class="month-select" onchange="onMonthChange()">
+                <!-- Options will be generated dynamically -->
+            </select>
+            <span class="month-count" id="monthCount"></span>
+        </div>
 
         <!-- Hero CTA - AI Generator -->
         <div class="hero-cta">
@@ -159,13 +200,128 @@
     <script src="assets/data.js"></script>
     <script src="assets/published-posts-loader.js"></script>
     <script>
+        // Current selected month (format: "MM/YYYY" e.g. "04/2026")
+        let currentMonth = null;
+        let currentFilter = 'all';
+
         // Initialize page
         document.addEventListener('DOMContentLoaded', () => {
+            initMonthSelector();
             updateAIPostsBadge();
             renderPosts();
             setupFilters();
             updateStats();
         });
+
+        // Extract month from post date (handles various formats)
+        function getPostMonth(post) {
+            if (!post.date) return null;
+            
+            // Format "DD/MM" (e.g. "02/03" or "15/04")
+            const match = post.date.match(/(\d{1,2})\/(\d{1,2})/);
+            if (match) {
+                const month = match[2].padStart(2, '0');
+                // Determine year based on month (assume 2026 for now)
+                return `${month}/2026`;
+            }
+            return null;
+        }
+
+        // Get all unique months from posts
+        function getAvailableMonths() {
+            const allPosts = getAllPosts();
+            const months = new Set();
+            
+            allPosts.forEach(post => {
+                const month = getPostMonth(post);
+                if (month) months.add(month);
+            });
+            
+            // Sort months chronologically
+            return Array.from(months).sort((a, b) => {
+                const [mA, yA] = a.split('/');
+                const [mB, yB] = b.split('/');
+                return (parseInt(yA) * 12 + parseInt(mA)) - (parseInt(yB) * 12 + parseInt(mB));
+            });
+        }
+
+        // Get month label
+        function getMonthLabel(monthStr) {
+            const monthNames = {
+                '01': 'Janvier', '02': 'Février', '03': 'Mars', '04': 'Avril',
+                '05': 'Mai', '06': 'Juin', '07': 'Juillet', '08': 'Août',
+                '09': 'Septembre', '10': 'Octobre', '11': 'Novembre', '12': 'Décembre'
+            };
+            const [month, year] = monthStr.split('/');
+            return `${monthNames[month]} ${year}`;
+        }
+
+        // Initialize month selector
+        function initMonthSelector() {
+            const select = document.getElementById('monthSelect');
+            const months = getAvailableMonths();
+            
+            // Add "All months" option
+            let options = '<option value="all">📅 Tous les mois</option>';
+            
+            // Add each available month
+            months.forEach(month => {
+                const allPosts = getAllPosts();
+                const count = allPosts.filter(p => getPostMonth(p) === month).length;
+                options += `<option value="${month}">${getMonthLabel(month)} (${count})</option>`;
+            });
+            
+            select.innerHTML = options;
+            
+            // Default to latest month (last in the sorted list)
+            if (months.length > 0) {
+                currentMonth = months[months.length - 1];
+                select.value = currentMonth;
+            }
+            
+            updateMonthCount();
+        }
+
+        // Handle month change
+        function onMonthChange() {
+            const select = document.getElementById('monthSelect');
+            currentMonth = select.value === 'all' ? null : select.value;
+            currentFilter = 'all';
+            
+            renderPosts();
+            setupFilters();
+            updateStats();
+            updateMonthCount();
+            
+            // Reset filter buttons
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.filter === 'all');
+            });
+        }
+
+        // Update month count display
+        function updateMonthCount() {
+            const countEl = document.getElementById('monthCount');
+            const posts = getFilteredPostsByMonth();
+            const aiCount = posts.filter(p => p.isGenerated).length;
+            
+            if (aiCount > 0) {
+                countEl.textContent = `${posts.length} posts (dont ${aiCount} 🤖 IA)`;
+            } else {
+                countEl.textContent = `${posts.length} posts`;
+            }
+        }
+
+        // Get posts filtered by current month
+        function getFilteredPostsByMonth() {
+            const allPosts = getAllPosts();
+            
+            if (!currentMonth) {
+                return allPosts; // No month filter
+            }
+            
+            return allPosts.filter(post => getPostMonth(post) === currentMonth);
+        }
 
         // Update AI posts badge and banner
         function updateAIPostsBadge() {
@@ -179,8 +335,8 @@
                 banner.innerHTML = `
                     <div class="ai-posts-info">
                         <span class="ai-posts-info-text">
-                            <strong>${count} posts générés par l'IA</strong> sont affichés dans cette vue.
-                            Ils sont stockés localement et ne modifient pas vos données de base.
+                            <strong>${count} posts générés par l'IA</strong> sont disponibles.
+                            Utilisez le sélecteur de mois pour les voir.
                         </span>
                         <button class="btn-clear-ai" onclick="clearAllPublishedPosts()">
                             🗑️ Retirer les posts IA
@@ -193,17 +349,30 @@
             }
         }
 
-        // Render posts grid - NOW USES getAllPosts()
+        // Render posts grid - FILTERED BY MONTH
         function renderPosts(filter = 'all') {
+            currentFilter = filter;
             const grid = document.getElementById('postsGrid');
-            const allPosts = getAllPosts(); // ← CHANGED: Uses merged posts
+            let posts = getFilteredPostsByMonth();
             
-            const posts = filter === 'all' 
-                ? allPosts 
-                : allPosts.filter(p => p.pilier === filter || p.format === filter);
+            // Apply pilier/format filter
+            if (filter !== 'all') {
+                posts = posts.filter(p => p.pilier === filter || p.format === filter);
+            }
+
+            if (posts.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text-muted, #888);">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+                        <p>Aucun post pour cette période</p>
+                        <a href="generate.html" style="color: #e63946; text-decoration: underline;">Générer des posts →</a>
+                    </div>
+                `;
+                return;
+            }
 
             grid.innerHTML = posts.map(post => `
-                <a href="post.html?id=${post.id}" class="post-card fade-in ${post.isGenerated ? 'generated' : ''}">
+                <a href="post.html?id=${post.id}${post.isGenerated ? '&source=ai' : ''}" class="post-card fade-in ${post.isGenerated ? 'generated' : ''}">
                     <div class="post-thumbnail">
                         ${getFormatEmoji(post.format)}
                     </div>
@@ -221,32 +390,32 @@
             `).join('');
         }
 
-        // Setup filter buttons - NOW USES getAllPosts()
+        // Setup filter buttons - USES MONTH-FILTERED POSTS
         function setupFilters() {
-            const allPosts = getAllPosts(); // ← CHANGED
+            const posts = getFilteredPostsByMonth();
             const container = document.getElementById('filtersContainer');
             
             // Count by pilier and format
             const counts = {
-                all: allPosts.length,
-                'Bon Marché': allPosts.filter(p => p.pilier === 'Bon Marché').length,
-                'Qualité': allPosts.filter(p => p.pilier === 'Qualité').length,
-                'Transparence': allPosts.filter(p => p.pilier === 'Transparence').length,
-                'pie_chart': allPosts.filter(p => p.format === 'pie_chart').length,
-                'meme': allPosts.filter(p => p.format === 'meme').length,
-                'checklist': allPosts.filter(p => p.format === 'checklist').length,
-                'poll': allPosts.filter(p => p.format === 'poll').length
+                all: posts.length,
+                'Bon Marché': posts.filter(p => p.pilier === 'Bon Marché').length,
+                'Qualité': posts.filter(p => p.pilier === 'Qualité').length,
+                'Transparence': posts.filter(p => p.pilier === 'Transparence').length,
+                'pie_chart': posts.filter(p => p.format === 'pie_chart').length,
+                'meme': posts.filter(p => p.format === 'meme').length,
+                'checklist': posts.filter(p => p.format === 'checklist').length,
+                'poll': posts.filter(p => p.format === 'poll').length
             };
             
             container.innerHTML = `
-                <button class="filter-btn active" data-filter="all">Tous (${counts.all})</button>
-                <button class="filter-btn" data-filter="Bon Marché">💰 Bon Marché (${counts['Bon Marché']})</button>
-                <button class="filter-btn" data-filter="Qualité">⭐ Qualité (${counts['Qualité']})</button>
-                <button class="filter-btn" data-filter="Transparence">🔍 Transparence (${counts['Transparence']})</button>
-                <button class="filter-btn" data-filter="pie_chart">📊 Pie Chart (${counts['pie_chart']})</button>
-                <button class="filter-btn" data-filter="meme">😂 Meme (${counts['meme']})</button>
-                <button class="filter-btn" data-filter="checklist">✅ Checklist (${counts['checklist']})</button>
-                <button class="filter-btn" data-filter="poll">📊 Poll (${counts['poll']})</button>
+                <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all">Tous (${counts.all})</button>
+                ${counts['Bon Marché'] > 0 ? `<button class="filter-btn ${currentFilter === 'Bon Marché' ? 'active' : ''}" data-filter="Bon Marché">💰 Bon Marché (${counts['Bon Marché']})</button>` : ''}
+                ${counts['Qualité'] > 0 ? `<button class="filter-btn ${currentFilter === 'Qualité' ? 'active' : ''}" data-filter="Qualité">⭐ Qualité (${counts['Qualité']})</button>` : ''}
+                ${counts['Transparence'] > 0 ? `<button class="filter-btn ${currentFilter === 'Transparence' ? 'active' : ''}" data-filter="Transparence">🔍 Transparence (${counts['Transparence']})</button>` : ''}
+                ${counts['pie_chart'] > 0 ? `<button class="filter-btn ${currentFilter === 'pie_chart' ? 'active' : ''}" data-filter="pie_chart">📊 Pie Chart (${counts['pie_chart']})</button>` : ''}
+                ${counts['meme'] > 0 ? `<button class="filter-btn ${currentFilter === 'meme' ? 'active' : ''}" data-filter="meme">😂 Meme (${counts['meme']})</button>` : ''}
+                ${counts['checklist'] > 0 ? `<button class="filter-btn ${currentFilter === 'checklist' ? 'active' : ''}" data-filter="checklist">✅ Checklist (${counts['checklist']})</button>` : ''}
+                ${counts['poll'] > 0 ? `<button class="filter-btn ${currentFilter === 'poll' ? 'active' : ''}" data-filter="poll">📊 Poll (${counts['poll']})</button>` : ''}
             `;
             
             // Add event listeners
@@ -260,15 +429,15 @@
             });
         }
 
-        // Update statistics - NOW USES getAllPosts()
+        // Update statistics - USES MONTH-FILTERED POSTS
         function updateStats() {
-            const allPosts = getAllPosts(); // ← CHANGED
+            const posts = getFilteredPostsByMonth();
             
             const stats = {
-                total: allPosts.length,
-                bonMarche: allPosts.filter(p => p.pilier === 'Bon Marché').length,
-                qualite: allPosts.filter(p => p.pilier === 'Qualité').length,
-                transparence: allPosts.filter(p => p.pilier === 'Transparence').length
+                total: posts.length,
+                bonMarche: posts.filter(p => p.pilier === 'Bon Marché').length,
+                qualite: posts.filter(p => p.pilier === 'Qualité').length,
+                transparence: posts.filter(p => p.pilier === 'Transparence').length
             };
 
             document.getElementById('totalPosts').textContent = stats.total;
@@ -309,7 +478,8 @@
                 return;
             }
 
-            const allPosts = getAllPosts(); // ← CHANGED: Export all posts including AI generated
+            // Export only current month's posts
+            const posts = getFilteredPostsByMonth();
 
             function buildCopyFR(post) {
                 const d = post.data && post.data.fr;
@@ -334,9 +504,9 @@
                 return parts.join('\n');
             }
 
-            const lignes = allPosts.map((post, index) => ({
+            const lignes = posts.map((post, index) => ({
                 'N°':            index + 1,
-                'Date':          post.date ? `${post.date}/03/26` : '',
+                'Date':          post.date || '',
                 'Format':        post.formatLabel || post.format || '',
                 'Pilier':        post.pilier || '',
                 'Objectif':      post.objectif_media || '',
@@ -367,8 +537,9 @@
                 { wch: 40 }
             ];
 
+            const monthLabel = currentMonth ? getMonthLabel(currentMonth).replace(' ', '_') : 'Tous';
             XLSX.utils.book_append_sheet(wb, ws, 'Traduction FR-NL');
-            XLSX.writeFile(wb, `Scarlet_Traduction_Export.xlsx`);
+            XLSX.writeFile(wb, `Scarlet_Traduction_${monthLabel}.xlsx`);
         }
 
     </script>
