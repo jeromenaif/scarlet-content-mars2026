@@ -20,6 +20,9 @@ const STORAGE_KEY = 'scarlet_generated_posts_history';
 const FEEDBACK_CACHE_KEY = 'scarlet_feedback_log_cache';
 const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 heure
 
+// Max length for context to avoid token issues
+const MAX_CONTEXT_LENGTH = 8000;
+
 // Fallback context si le chargement échoue
 const FALLBACK_CONTEXT = `
 ## LES 3 PILIERS SCARLET
@@ -74,7 +77,7 @@ async function loadFeedbackLog() {
         // Check cache first
         const cached = getCachedFeedbackLog();
         if (cached) {
-            SCARLET_CONTEXT = cached;
+            SCARLET_CONTEXT = cleanMarkdownForPrompt(cached);
             updateContextStatus('cached');
             console.log('📋 FEEDBACK_LOG chargé depuis le cache');
             return;
@@ -92,14 +95,15 @@ async function loadFeedbackLog() {
         
         const markdown = await response.text();
         
-        // Store in context
-        SCARLET_CONTEXT = markdown;
+        // Clean and store in context
+        SCARLET_CONTEXT = cleanMarkdownForPrompt(markdown);
         
-        // Cache it
+        // Cache it (raw version)
         cacheFeedbackLog(markdown);
         
         updateContextStatus('loaded');
         console.log('✅ FEEDBACK_LOG chargé avec succès depuis GitHub');
+        console.log(`📏 Taille du contexte: ${SCARLET_CONTEXT.length} caractères`);
         
     } catch (error) {
         console.error('❌ Erreur chargement FEEDBACK_LOG:', error);
@@ -109,6 +113,30 @@ async function loadFeedbackLog() {
         updateContextStatus('fallback');
         console.log('⚠️ Utilisation du contexte de secours');
     }
+}
+
+// Clean markdown for use in prompt (remove problematic characters, truncate if needed)
+function cleanMarkdownForPrompt(markdown) {
+    let cleaned = markdown
+        // Remove code blocks that might confuse JSON parsing
+        .replace(/```[\s\S]*?```/g, '')
+        // Remove inline code
+        .replace(/`[^`]*`/g, '')
+        // Remove excessive whitespace
+        .replace(/\n{3,}/g, '\n\n')
+        // Remove special characters that might break JSON
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/[\u201C\u201D]/g, '"')
+        // Trim
+        .trim();
+    
+    // Truncate if too long
+    if (cleaned.length > MAX_CONTEXT_LENGTH) {
+        console.warn(`⚠️ FEEDBACK_LOG tronqué de ${cleaned.length} à ${MAX_CONTEXT_LENGTH} caractères`);
+        cleaned = cleaned.substring(0, MAX_CONTEXT_LENGTH) + '\n\n[... contexte tronqué pour optimisation ...]';
+    }
+    
+    return cleaned;
 }
 
 function getCachedFeedbackLog() {
@@ -641,7 +669,7 @@ function exportToExcel(posts, monthLabel) {
 
 // ==================== GENERATION FUNCTIONS ====================
 
-// Generate Full Month
+// Generate Full Month - with batch support for large numbers
 async function generateFull() {
     const postCountInput = document.getElementById('postCount');
     const postCount = parseInt(postCountInput.value);
@@ -660,27 +688,151 @@ async function generateFull() {
         varyFormats: document.getElementById('varyFormats').checked
     };
     
+    // Batch generation if more than 6 posts
+    const BATCH_SIZE = 6;
+    
+    if (postCount > BATCH_SIZE) {
+        await generateInBatches(postCount, month, monthLabel, options, BATCH_SIZE);
+    } else {
+        await generateSingleBatch(postCount, month, monthLabel, options);
+    }
+}
+
+// Generate in batches for large numbers of posts
+async function generateInBatches(totalPosts, month, monthLabel, options, batchSize) {
+    const batches = Math.ceil(totalPosts / batchSize);
+    let allPosts = [];
+    
+    showLoading(`Génération de ${totalPosts} posts en ${batches} étapes pour ${monthLabel}...`);
+    
+    try {
+        const insights = analyzeHistory();
+        
+        for (let i = 0; i < batches; i++) {
+            const postsInThisBatch = Math.min(batchSize, totalPosts - (i * batchSize));
+            const batchNumber = i + 1;
+            
+            // Update loading message
+            updateLoadingMessage(`Étape ${batchNumber}/${batches} : Génération de ${postsInThisBatch} posts...`);
+            
+            // Build prompt with batch context
+            const prompt = buildBatchGenerationPrompt(month, postsInThisBatch, options, insights, batchNumber, batches, allPosts);
+            
+            console.log(`📦 Batch ${batchNumber}/${batches}: génération de ${postsInThisBatch} posts`);
+            
+            // Call API
+            const batchResult = await callClaudeAPI(prompt);
+            
+            // Add batch results
+            allPosts = allPosts.concat(batchResult);
+            
+            console.log(`✅ Batch ${batchNumber} terminé, total: ${allPosts.length} posts`);
+            
+            // Small delay between batches to avoid rate limiting
+            if (i < batches - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        
+        // Save to history
+        saveToHistory(allPosts, 'full', monthLabel);
+        
+        // Display all posts
+        displayGeneratedPosts(allPosts, 'full');
+        
+    } catch (error) {
+        showError(`Erreur lors de la génération: ${error.message}`);
+    }
+}
+
+// Generate a single batch (6 posts or less)
+async function generateSingleBatch(postCount, month, monthLabel, options) {
     showLoading(`Génération de ${postCount} posts pour ${monthLabel}...`);
     
     try {
-        // Analyze history
         const insights = analyzeHistory();
-        
-        // Build prompt
         const prompt = buildFullGenerationPrompt(month, postCount, options, insights);
-        
-        // Call API
         const result = await callClaudeAPI(prompt);
         
-        // Save to history
         saveToHistory(result, 'full', monthLabel);
-        
-        // Parse and display results
         displayGeneratedPosts(result, 'full');
         
     } catch (error) {
         showError(`Erreur lors de la génération: ${error.message}`);
     }
+}
+
+// Update loading message without resetting the whole UI
+function updateLoadingMessage(message) {
+    const messageEl = document.querySelector('.status-message > div:nth-child(2)');
+    if (messageEl) {
+        messageEl.textContent = message;
+    }
+}
+
+// Build prompt for batch generation
+function buildBatchGenerationPrompt(month, postCount, options, insights, batchNumber, totalBatches, previousPosts) {
+    // Include info about previous posts to avoid repetition
+    let previousPostsContext = '';
+    if (previousPosts.length > 0) {
+        const previousThemes = previousPosts.map(p => `- ${p.theme} (${p.format}, ${p.pilier})`).join('\n');
+        previousPostsContext = `
+
+## POSTS DÉJÀ GÉNÉRÉS (à ne PAS répéter)
+${previousThemes}
+
+IMPORTANT: Génère des posts avec des thèmes DIFFÉRENTS de ceux ci-dessus.`;
+    }
+    
+    return `Tu es un expert en création de contenu pour Scarlet, opérateur télécom belge.
+
+## RÈGLES ET CONTEXTE SCARLET (FEEDBACK_LOG)
+${SCARLET_CONTEXT}
+
+## CONTEXTE DE GÉNÉRATION
+- Mois à générer: ${month}
+- Batch ${batchNumber}/${totalBatches}: génère exactement ${postCount} posts
+- Analyser historique: ${options.analyzeHistory ? 'Oui' : 'Non'}
+- Tendances belges: ${options.belgianTrends ? 'Oui' : 'Non'}
+${previousPostsContext}
+
+## HISTORIQUE DES PERFORMANCES
+${insights.insights}
+
+## INSTRUCTIONS SPÉCIFIQUES
+
+1. **Génère exactement ${postCount} posts** - ni plus, ni moins
+2. **Ratio objectifs média** : Mix équilibré ENGAGEMENT et REACH
+3. **Varier les formats** : Privilégier meme et poll
+4. **Éviter les répétitions** : Thèmes différents des posts déjà générés
+
+## FORMAT DE SORTIE
+
+Génère ${postCount} concepts de posts au format JSON:
+
+\`\`\`json
+[
+  {
+    "date": "JJ/MM",
+    "format": "meme|pie_chart|checklist|poll",
+    "pilier": "Bon Marché|Qualité|Transparence",
+    "theme": "Thème court",
+    "objectif_media": "REACH|ENGAGEMENT",
+    "objectif_justification": "Pourquoi cet objectif (court)",
+    "data": {
+      "fr": { ... },
+      "nl": { ... }
+    },
+    "captions": {
+      "fr": "Caption FR (2 phrases max)",
+      "nl": "Caption NL (2 phrases max)"
+    },
+    "reasoning": "Pourquoi ça va performer (1 phrase)"
+  }
+]
+\`\`\`
+
+IMPORTANT: Retourne UNIQUEMENT le JSON valide, sans texte avant ou après.`;
 }
 
 // Generate Ideation
@@ -933,6 +1085,9 @@ IMPORTANT:
 
 // Call Claude API via Cloudflare Worker proxy
 async function callClaudeAPI(prompt) {
+    console.log('📤 Envoi de la requête API...');
+    console.log(`📏 Taille du prompt: ${prompt.length} caractères`);
+    
     const response = await fetch(PROXY_URL, {
         method: 'POST',
         headers: {
@@ -940,7 +1095,7 @@ async function callClaudeAPI(prompt) {
         },
         body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
-            max_tokens: 4096,
+            max_tokens: 8192, // Increased for longer responses
             messages: [{
                 role: 'user',
                 content: prompt
@@ -951,38 +1106,76 @@ async function callClaudeAPI(prompt) {
     const data = await response.json();
     
     if (!response.ok || data.error) {
+        console.error('❌ Erreur API:', data);
         throw new Error(`Erreur API (${response.status}): ${JSON.stringify(data.error || data)}`);
     }
     
     if (!data.content || !data.content[0]) {
+        console.error('❌ Réponse inattendue:', data);
         throw new Error(`Réponse inattendue du serveur: ${JSON.stringify(data)}`);
     }
-    const content = data.content[0].text;
     
-    // Extract JSON from response
-    const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-        throw new Error('Format de réponse invalide');
+    const content = data.content[0].text;
+    console.log('📥 Réponse reçue, longueur:', content.length);
+    console.log('📄 Début de la réponse:', content.substring(0, 200));
+    
+    // Try multiple extraction methods
+    let jsonText = null;
+    
+    // Method 1: Look for ```json block
+    const jsonBlockMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonBlockMatch) {
+        jsonText = jsonBlockMatch[1];
+        console.log('✅ JSON extrait via bloc ```json');
     }
     
-    let jsonText = jsonMatch[1] || jsonMatch[0];
+    // Method 2: Look for raw JSON array
+    if (!jsonText) {
+        const arrayMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        if (arrayMatch) {
+            jsonText = arrayMatch[0];
+            console.log('✅ JSON extrait via pattern array');
+        }
+    }
     
-    // Clean up common JSON issues
+    // Method 3: Try to find JSON starting from first [
+    if (!jsonText) {
+        const startIndex = content.indexOf('[');
+        const endIndex = content.lastIndexOf(']');
+        if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+            jsonText = content.substring(startIndex, endIndex + 1);
+            console.log('✅ JSON extrait via indices [ ]');
+        }
+    }
+    
+    if (!jsonText) {
+        console.error('❌ Impossible de trouver du JSON dans:', content);
+        throw new Error('Format de réponse invalide - pas de JSON trouvé');
+    }
+    
+    // Clean up the JSON
     jsonText = cleanJSON(jsonText);
+    console.log('🧹 JSON nettoyé, longueur:', jsonText.length);
     
     try {
-        return JSON.parse(jsonText);
+        const parsed = JSON.parse(jsonText);
+        console.log('✅ JSON parsé avec succès, nombre d\'éléments:', parsed.length);
+        return parsed;
     } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Raw JSON:', jsonText);
+        console.error('❌ Erreur parsing JSON:', parseError.message);
+        console.error('📄 JSON problématique:', jsonText.substring(0, 500));
         
         // Try more aggressive cleaning
         jsonText = aggressiveJSONClean(jsonText);
+        console.log('🔧 Tentative avec nettoyage agressif...');
         
         try {
-            return JSON.parse(jsonText);
+            const parsed = JSON.parse(jsonText);
+            console.log('✅ JSON parsé après nettoyage agressif');
+            return parsed;
         } catch (secondError) {
-            throw new Error(`JSON invalide généré par l'API. Veuillez réessayer.`);
+            console.error('❌ Échec définitif du parsing');
+            throw new Error(`JSON invalide généré par l'API. Veuillez réessayer.\n\nDétail: ${parseError.message}`);
         }
     }
 }
@@ -990,25 +1183,38 @@ async function callClaudeAPI(prompt) {
 // Clean common JSON formatting issues
 function cleanJSON(jsonStr) {
     return jsonStr
+        // Remove BOM and zero-width characters
+        .replace(/^\uFEFF/, '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        // Smart quotes to regular quotes
+        .replace(/[""„]/g, '"')
+        .replace(/['']/g, "'")
         // Remove trailing commas before ] or }
-        .replace(/,\s*([\]}])/g, '$1')
-        // Fix unescaped quotes inside strings (basic attempt)
-        .replace(/:\s*"([^"]*?)"\s*([,\}])/g, (match, content, ending) => {
-            // Escape any unescaped quotes inside the content
-            const escaped = content.replace(/(?<!\\)"/g, '\\"');
-            return `: "${escaped}"${ending}`;
-        })
-        // Remove any control characters except newlines in strings
+        .replace(/,(\s*[\]}])/g, '$1')
+        // Fix common escaping issues
+        .replace(/\\\n/g, '\\n')
+        // Remove any control characters
         .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, ' ')
+        // Normalize line breaks inside strings (but keep \n as escape)
+        .replace(/\r\n/g, '\\n')
+        .replace(/\r/g, '\\n')
         // Trim whitespace
         .trim();
 }
 
 // More aggressive JSON cleaning for stubborn cases
 function aggressiveJSONClean(jsonStr) {
+    console.log('🔧 Nettoyage agressif du JSON...');
+    
     // Try to extract just the array
     const arrayMatch = jsonStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (!arrayMatch) {
+        // Try to rebuild from objects
+        const objects = jsonStr.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+        if (objects && objects.length > 0) {
+            console.log(`🔧 Reconstruction depuis ${objects.length} objets trouvés`);
+            return '[' + objects.join(',') + ']';
+        }
         throw new Error('Impossible de trouver un tableau JSON valide');
     }
     
@@ -1017,14 +1223,22 @@ function aggressiveJSONClean(jsonStr) {
     // Replace problematic characters
     cleaned = cleaned
         // Smart quotes to regular quotes
-        .replace(/[""]/g, '"')
+        .replace(/[""„]/g, '"')
         .replace(/['']/g, "'")
         // Remove zero-width characters
         .replace(/[\u200B-\u200D\uFEFF]/g, '')
-        // Fix escaped newlines in strings
-        .replace(/\n/g, '\\n')
+        // Handle newlines in strings - convert actual newlines to \n
+        .replace(/("(?:[^"\\]|\\.)*")/g, (match) => {
+            return match.replace(/\n/g, '\\n').replace(/\r/g, '');
+        })
         // Remove trailing commas
-        .replace(/,\s*([\]}])/g, '$1');
+        .replace(/,(\s*[\]}])/g, '$1')
+        // Fix double commas
+        .replace(/,,+/g, ',')
+        // Remove commas after opening brackets
+        .replace(/([\[{])\s*,/g, '$1');
+    
+    console.log('🔧 JSON après nettoyage agressif:', cleaned.substring(0, 200));
     
     return cleaned;
 }
@@ -1191,9 +1405,17 @@ function showError(message) {
         <div class="status-message">
             <div class="status-icon">⚠️</div>
             <div style="color: #ff6b6b;">${message}</div>
-            <button class="btn btn-secondary" style="margin-top: 20px;" onclick="location.reload()">
-                🔄 Réessayer
-            </button>
+            <div style="margin-top: 16px; font-size: 12px; color: var(--text-muted);">
+                💡 Conseil: Ouvrez la console (F12) pour voir les détails de l'erreur.
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 20px;">
+                <button class="btn btn-primary" onclick="location.reload()">
+                    🔄 Réessayer
+                </button>
+                <button class="btn btn-secondary" onclick="refreshFeedbackLog().then(() => alert('Règles rechargées !'))">
+                    📋 Recharger les règles
+                </button>
+            </div>
         </div>
     `;
     
