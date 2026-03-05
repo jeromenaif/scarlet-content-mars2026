@@ -1,78 +1,53 @@
-// Post Renderer Script - Version 2.0 with AI posts support
+// Post Renderer Script - Version 2.1 (Fixed for AI posts)
+// Requires: data.js and published-posts-loader.js loaded before this script
+
 let currentPost = null;
 let currentLang = 'fr';
-
-// Storage key for published posts (must match the one in published-posts-loader.js)
-const PUBLISHED_POSTS_KEY = 'scarlet_published_posts';
-
-// Get published posts from localStorage
-function getPublishedPosts() {
-    try {
-        const data = localStorage.getItem(PUBLISHED_POSTS_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        console.error('Erreur lecture posts publiés:', e);
-        return [];
-    }
-}
-
-// Get all posts (POSTS_DATA + published AI posts)
-function getAllPosts() {
-    const published = getPublishedPosts();
-    
-    // Assign unique IDs to published posts if needed
-    const maxExistingId = POSTS_DATA.reduce((max, p) => Math.max(max, p.id || 0), 0);
-    
-    const publishedWithIds = published.map((post, index) => ({
-        ...post,
-        id: post.id || (maxExistingId + index + 1),
-        formatLabel: post.formatLabel || getFormatLabelFromFormat(post.format),
-        isGenerated: true
-    }));
-    
-    return [...publishedWithIds, ...POSTS_DATA];
-}
-
-// Get format label
-function getFormatLabelFromFormat(format) {
-    const labels = {
-        'pie_chart': '📊 Pie Chart',
-        'meme': '😂 Meme',
-        'checklist': '✅ Checklist',
-        'poll': '📊 Poll'
-    };
-    return labels[format] || format;
-}
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
     const postId = urlParams.get('id');
-    const source = urlParams.get('source'); // 'ai' if from AI generator
+    
+    console.log('🔍 Recherche du post ID:', postId);
     
     if (!postId) {
+        console.error('❌ Pas d\'ID dans l\'URL');
         window.location.href = 'index.html';
         return;
     }
     
     // Get all posts including AI-generated ones
-    const allPosts = getAllPosts();
+    // getAllPosts() is defined in published-posts-loader.js
+    let allPosts;
+    if (typeof getAllPosts === 'function') {
+        allPosts = getAllPosts();
+        console.log('✅ Utilisation de getAllPosts() - posts IA inclus');
+    } else {
+        allPosts = POSTS_DATA;
+        console.log('⚠️ getAllPosts() non disponible, utilisation de POSTS_DATA uniquement');
+    }
+    
+    console.log('📚 Nombre total de posts:', allPosts.length);
     
     // Find post - handle both numeric and string IDs
     currentPost = allPosts.find(p => {
-        if (typeof p.id === 'number') {
-            return p.id === parseInt(postId);
-        }
-        return p.id === postId || String(p.id) === postId;
+        const pId = String(p.id);
+        const searchId = String(postId);
+        return pId === searchId;
     });
     
     if (!currentPost) {
-        alert('Publication non trouvée');
+        console.error('❌ Post non trouvé avec ID:', postId);
+        console.log('📋 IDs disponibles:', allPosts.map(p => p.id));
+        alert('Publication non trouvée (ID: ' + postId + ')');
         window.location.href = 'index.html';
         return;
     }
     
-    console.log('📄 Post chargé:', currentPost.theme, currentPost.isGenerated ? '(IA)' : '(Manuel)');
+    console.log('✅ Post trouvé:', currentPost.theme);
+    console.log('📄 Format:', currentPost.format);
+    console.log('📄 Data:', currentPost.data);
     
     renderPost();
     loadTallyForm();
@@ -80,14 +55,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Main render function
 function renderPost() {
+    // Determine if this is an AI-generated post
+    const isGenerated = currentPost.isGenerated || 
+                        (typeof currentPost.id === 'string' && currentPost.id.startsWith('gen_'));
+    
     // Update header
-    document.getElementById('postTitle').textContent = `Post #${currentPost.id} — ${currentPost.theme}`;
+    const postIdDisplay = isGenerated ? 'IA' : currentPost.id;
+    document.getElementById('postTitle').textContent = `Post #${postIdDisplay} — ${currentPost.theme}`;
     
     const subtitleEl = document.getElementById('postSubtitle');
-    if (currentPost.isGenerated) {
-        subtitleEl.innerHTML = `${currentPost.date || '??/??'}/2026 • ${currentPost.formatLabel || currentPost.format} <span style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 8px;">🤖 Généré par IA</span>`;
+    const formatLabel = currentPost.formatLabel || getFormatLabelLocal(currentPost.format);
+    
+    if (isGenerated) {
+        subtitleEl.innerHTML = `${currentPost.date || '??/??'}/2026 • ${formatLabel} <span style="background: linear-gradient(135deg, #9b59b6, #8e44ad); color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; margin-left: 8px;">🤖 Généré par IA</span>`;
     } else {
-        subtitleEl.textContent = `${currentPost.date}/2026 • ${currentPost.formatLabel}`;
+        subtitleEl.textContent = `${currentPost.date}/2026 • ${formatLabel}`;
     }
     
     // Render meta information
@@ -98,6 +80,17 @@ function renderPost() {
     
     // Render visual
     renderVisual();
+}
+
+// Get format label
+function getFormatLabelLocal(format) {
+    const labels = {
+        'pie_chart': '📊 Pie Chart',
+        'meme': '😂 Meme',
+        'checklist': '✅ Checklist',
+        'poll': '📊 Poll'
+    };
+    return labels[format] || format;
 }
 
 // Render post metadata
@@ -115,10 +108,12 @@ function renderPostMeta() {
         objectifBadge = `<span class="badge" style="background: ${isEngagement ? '#9b59b6' : '#3498db'}; color: white;">${isEngagement ? '💬 Engagement' : '🎯 Reach'}</span>`;
     }
     
+    const formatLabel = currentPost.formatLabel || getFormatLabelLocal(currentPost.format);
+    
     document.getElementById('postMeta').innerHTML = `
         <div style="margin-bottom: 20px;">
             <span class="badge ${pilierClass}">${currentPost.pilier}</span>
-            <span class="badge badge-format">${currentPost.formatLabel || currentPost.format}</span>
+            <span class="badge badge-format">${formatLabel}</span>
             <span class="badge badge-date">${currentPost.date || '??/??'}/26</span>
             ${objectifBadge}
         </div>
@@ -130,7 +125,12 @@ function renderPostMeta() {
 
 // Render editable caption
 function renderCaption() {
-    const caption = currentPost.captions?.[currentLang] || currentPost.captions?.fr || '';
+    let caption = '';
+    
+    if (currentPost.captions) {
+        caption = currentPost.captions[currentLang] || currentPost.captions.fr || '';
+    }
+    
     document.getElementById('captionEditable').innerHTML = `
         <div class="caption-editable">
             <h4>
@@ -153,15 +153,32 @@ function updateCaptionPreview() {
 
 // Render visual based on format
 function renderVisual() {
-    const data = currentPost.data?.[currentLang] || currentPost.data?.fr;
+    console.log('🎨 Rendu visuel pour format:', currentPost.format);
     
-    if (!data) {
+    // Get data for current language, with fallbacks
+    let data = null;
+    
+    if (currentPost.data) {
+        // Try to get language-specific data
+        if (currentPost.data[currentLang]) {
+            data = currentPost.data[currentLang];
+        } else if (currentPost.data.fr) {
+            data = currentPost.data.fr;
+        } else {
+            // Data might be at root level (not nested by language)
+            data = currentPost.data;
+        }
+    }
+    
+    console.log('📊 Données pour rendu:', data);
+    
+    if (!data || (typeof data === 'object' && Object.keys(data).length === 0)) {
         document.getElementById('visualContainer').innerHTML = `
             <div class="visual" id="visualToExport" style="display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px;">
                 <div style="font-size: 64px;">🎨</div>
-                <div style="color: #888; text-align: center;">
-                    <p>Données visuelles non disponibles</p>
-                    <p style="font-size: 12px; margin-top: 8px;">Ce post a été généré par l'IA.<br>Les données visuelles seront ajoutées manuellement.</p>
+                <div style="color: white; text-align: center; padding: 20px;">
+                    <p style="font-size: 18px; font-weight: bold; margin-bottom: 12px;">Visuel en cours de création</p>
+                    <p style="font-size: 13px; opacity: 0.8;">Les données visuelles seront ajoutées par l'équipe graphique.</p>
                 </div>
                 <div class="logo">scarlet</div>
             </div>
@@ -185,7 +202,7 @@ function renderVisual() {
             visualHTML = renderPoll(data);
             break;
         default:
-            visualHTML = `<div style="padding: 40px; text-align: center; color: #888;">Format "${currentPost.format}" non supporté</div>`;
+            visualHTML = `<div class="visual-inner" style="display: flex; align-items: center; justify-content: center;"><p style="color: #888;">Format "${currentPost.format}" non supporté</p></div>`;
     }
     
     document.getElementById('visualContainer').innerHTML = `
@@ -198,31 +215,40 @@ function renderVisual() {
 
 // Render Pie Chart
 function renderPieChart(data) {
-    if (!data.percentages || !data.legends) {
-        return '<div style="padding: 40px; text-align: center; color: #888;">Données de graphique manquantes</div>';
+    // Handle various data structures
+    const chartTitle = data.chartTitle || data.title || 'Titre';
+    const legends = data.legends || data.labels || ['Option 1', 'Option 2'];
+    const percentages = data.percentages || data.values || [50, 50];
+    
+    if (!percentages || percentages.length === 0) {
+        return '<div class="visual-inner" style="display: flex; align-items: center; justify-content: center;"><p>Données de graphique manquantes</p></div>';
     }
     
-    const total = data.percentages.reduce((a, b) => a + b, 0);
+    const total = percentages.reduce((a, b) => a + b, 0);
     let gradient = '';
     let cumul = 0;
     
-    data.percentages.forEach((pct, i) => {
+    const colors = (typeof CONFIG !== 'undefined' && CONFIG.chartColors) 
+        ? CONFIG.chartColors 
+        : ['#2BA600', '#E61F13', '#FFB800', '#0066CC'];
+    
+    percentages.forEach((pct, i) => {
         const start = (cumul / total) * 100;
         cumul += pct;
         const end = (cumul / total) * 100;
-        gradient += `${CONFIG.chartColors[i]} ${start}% ${end}%${i < data.percentages.length - 1 ? ',' : ''}`;
+        gradient += `${colors[i % colors.length]} ${start}% ${end}%${i < percentages.length - 1 ? ',' : ''}`;
     });
     
-    const legendsHTML = data.legends.map((legend, i) => `
+    const legendsHTML = legends.map((legend, i) => `
         <div class="legend-item">
-            <div class="legend-color" style="background:${CONFIG.chartColors[i]}"></div>
+            <div class="legend-color" style="background:${colors[i % colors.length]}"></div>
             <span class="legend-text editable-text" contenteditable="true" data-field="legend-${i}">${legend}</span>
         </div>
     `).join('');
     
     return `
         <div class="visual-inner">
-            <div class="visual-title editable-text" contenteditable="true" data-field="title">${data.chartTitle || 'Titre'}</div>
+            <div class="visual-title editable-text" contenteditable="true" data-field="title">${chartTitle}</div>
             <div class="pie-container">
                 <div class="pie-chart" style="background: conic-gradient(${gradient})"></div>
                 <div>${legendsHTML}</div>
@@ -233,18 +259,21 @@ function renderPieChart(data) {
 
 // Render Meme
 function renderMeme(data) {
+    const topText = data.topText || data.top || data.panel1 || 'Texte du haut';
+    const bottomText = data.bottomText || data.bottom || data.panel2 || 'Texte du bas';
+    
     return `
         <div class="meme-inner">
             <div class="meme-panel top">
                 <div>
                     <div class="meme-emoji">😌</div>
-                    <div class="meme-text editable-text" contenteditable="true" data-field="topText">${data.topText || 'Texte du haut'}</div>
+                    <div class="meme-text editable-text" contenteditable="true" data-field="topText">${topText}</div>
                 </div>
             </div>
             <div class="meme-panel bottom">
                 <div>
                     <div class="meme-emoji">😵‍💫</div>
-                    <div class="meme-text editable-text" contenteditable="true" data-field="bottomText">${data.bottomText || 'Texte du bas'}</div>
+                    <div class="meme-text editable-text" contenteditable="true" data-field="bottomText">${bottomText}</div>
                 </div>
             </div>
         </div>
@@ -253,7 +282,9 @@ function renderMeme(data) {
 
 // Render Checklist
 function renderChecklist(data) {
-    const items = data.items || ['Item 1', 'Item 2', 'Item 3'];
+    const title = data.checklistTitle || data.title || 'Titre checklist';
+    const items = data.items || data.list || ['Item 1', 'Item 2', 'Item 3'];
+    
     const itemsHTML = items.map((item, i) => `
         <div class="check-item">
             <div class="check-box">✓</div>
@@ -263,7 +294,7 @@ function renderChecklist(data) {
     
     return `
         <div class="visual-inner">
-            <div class="visual-title editable-text" contenteditable="true" data-field="title">${data.checklistTitle || 'Titre checklist'}</div>
+            <div class="visual-title editable-text" contenteditable="true" data-field="title">${title}</div>
             ${itemsHTML}
         </div>
     `;
@@ -271,12 +302,14 @@ function renderChecklist(data) {
 
 // Render Poll
 function renderPoll(data) {
+    const question = data.question || 'Question ?';
     const options = data.options || ['Option 1', 'Option 2'];
+    
     return `
         <div class="visual-inner" style="justify-content:center">
-            <div class="poll-question editable-text" contenteditable="true" data-field="question">${data.question || 'Question ?'}</div>
-            <div class="poll-option opt1 editable-text" contenteditable="true" data-field="option1">${options[0]}</div>
-            <div class="poll-option opt2 editable-text" contenteditable="true" data-field="option2">${options[1]}</div>
+            <div class="poll-question editable-text" contenteditable="true" data-field="question">${question}</div>
+            <div class="poll-option opt1 editable-text" contenteditable="true" data-field="option1">${options[0] || 'Option 1'}</div>
+            <div class="poll-option opt2 editable-text" contenteditable="true" data-field="option2">${options[1] || 'Option 2'}</div>
         </div>
     `;
 }
@@ -300,6 +333,11 @@ function setLang(lang) {
 async function exportPNG() {
     const btn = document.getElementById('exportBtn');
     const visual = document.getElementById('visualToExport');
+    
+    if (!visual) {
+        alert('Aucun visuel à exporter');
+        return;
+    }
     
     btn.innerHTML = '⏳ Export en cours...';
     btn.disabled = true;
@@ -332,9 +370,11 @@ async function exportPNG() {
 // Load Tally form
 function loadTallyForm() {
     const container = document.getElementById('tallyContainer');
+    const isGenerated = currentPost.isGenerated || 
+                        (typeof currentPost.id === 'string' && currentPost.id.startsWith('gen_'));
     
     // Don't show Tally form for AI-generated posts
-    if (currentPost.isGenerated) {
+    if (isGenerated) {
         container.innerHTML = `
             <div style="background: rgba(155, 89, 182, 0.1); border: 1px solid rgba(155, 89, 182, 0.3); border-radius: 12px; padding: 20px; text-align: center;">
                 <div style="font-size: 24px; margin-bottom: 12px;">🤖</div>
@@ -345,9 +385,13 @@ function loadTallyForm() {
         return;
     }
     
+    const tallyFormId = (typeof CONFIG !== 'undefined' && CONFIG.tallyFormId) 
+        ? CONFIG.tallyFormId 
+        : 'b5dPb7';
+    
     container.innerHTML = `
         <iframe 
-            src="https://tally.so/embed/${CONFIG.tallyFormId}?transparentBackground=1&hideTitle=1&dynamicHeight=1&post=${currentPost.id}"
+            src="https://tally.so/embed/${tallyFormId}?transparentBackground=1&hideTitle=1&dynamicHeight=1&post=${currentPost.id}"
             class="tally-iframe"
             frameborder="0"
             marginheight="0"
