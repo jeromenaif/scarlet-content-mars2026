@@ -23,6 +23,9 @@ const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 heure
 // Max length for context to avoid token issues
 const MAX_CONTEXT_LENGTH = 8000;
 
+// Storage key for published posts (shown in overview)
+const PUBLISHED_POSTS_KEY = 'scarlet_published_posts';
+
 // Fallback context si le chargement échoue
 const FALLBACK_CONTEXT = `
 ## LES 3 PILIERS SCARLET
@@ -570,6 +573,63 @@ function exportHistoryToExcel(index) {
     if (history[index]) {
         exportToExcel(history[index].posts, history[index].month);
     }
+}
+
+// ==================== PUBLISH TO OVERVIEW ====================
+
+function publishToOverview() {
+    if (!generatedPosts || generatedPosts.length === 0) {
+        alert('⚠️ Aucun post à publier. Générez d\'abord des posts.');
+        return;
+    }
+    
+    // Get existing published posts
+    const existingPosts = getPublishedPosts();
+    
+    // Add IDs to new posts (based on timestamp + index)
+    const timestamp = Date.now();
+    const newPosts = generatedPosts.map((post, index) => ({
+        ...post,
+        id: `gen_${timestamp}_${index}`,
+        generated: true,
+        publishedAt: new Date().toISOString()
+    }));
+    
+    // Combine with existing (new posts first)
+    const allPublished = [...newPosts, ...existingPosts];
+    
+    // Save to localStorage
+    try {
+        localStorage.setItem(PUBLISHED_POSTS_KEY, JSON.stringify(allPublished));
+        
+        alert(`✅ ${newPosts.length} posts publiés vers la vue d'ensemble !\n\nRetournez à l'aperçu pour les voir.`);
+        
+        console.log(`📤 ${newPosts.length} posts publiés, total: ${allPublished.length}`);
+    } catch (e) {
+        console.error('Erreur publication:', e);
+        alert('❌ Erreur lors de la publication. Vérifiez la console.');
+    }
+}
+
+function getPublishedPosts() {
+    try {
+        const data = localStorage.getItem(PUBLISHED_POSTS_KEY);
+        return data ? JSON.parse(data) : [];
+    } catch (e) {
+        console.error('Erreur lecture posts publiés:', e);
+        return [];
+    }
+}
+
+function clearPublishedPosts() {
+    if (confirm('⚠️ Supprimer tous les posts publiés de la vue d\'ensemble ?')) {
+        localStorage.removeItem(PUBLISHED_POSTS_KEY);
+        alert('✅ Posts publiés supprimés.');
+    }
+}
+
+function getPublishedPostsCount() {
+    return getPublishedPosts().length;
 }
 
 // ==================== EXCEL EXPORT ====================
@@ -1319,7 +1379,10 @@ function displayGeneratedPosts(posts, mode) {
             ${postsHTML}
         </div>
         <div style="margin-top: 30px; text-align: center; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="exportToExcel(generatedPosts, '${new Date().toLocaleDateString('fr-BE')}')">
+            <button class="btn btn-primary" onclick="publishToOverview()" style="background: linear-gradient(135deg, #e63946, #ff6b6b);">
+                🚀 Publier vers l'aperçu
+            </button>
+            <button class="btn btn-secondary" onclick="exportToExcel(generatedPosts, '${new Date().toLocaleDateString('fr-BE')}')">
                 📊 Télécharger Excel
             </button>
             <button class="btn btn-secondary" onclick="downloadAsJSON()">
