@@ -782,8 +782,68 @@ async function callClaudeAPI(prompt) {
         throw new Error('Format de réponse invalide');
     }
     
-    const jsonText = jsonMatch[1] || jsonMatch[0];
-    return JSON.parse(jsonText);
+    let jsonText = jsonMatch[1] || jsonMatch[0];
+    
+    // Clean up common JSON issues
+    jsonText = cleanJSON(jsonText);
+    
+    try {
+        return JSON.parse(jsonText);
+    } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        console.error('Raw JSON:', jsonText);
+        
+        // Try more aggressive cleaning
+        jsonText = aggressiveJSONClean(jsonText);
+        
+        try {
+            return JSON.parse(jsonText);
+        } catch (secondError) {
+            throw new Error(`JSON invalide généré par l'API. Veuillez réessayer.`);
+        }
+    }
+}
+
+// Clean common JSON formatting issues
+function cleanJSON(jsonStr) {
+    return jsonStr
+        // Remove trailing commas before ] or }
+        .replace(/,\s*([\]}])/g, '$1')
+        // Fix unescaped quotes inside strings (basic attempt)
+        .replace(/:\s*"([^"]*?)"\s*([,\}])/g, (match, content, ending) => {
+            // Escape any unescaped quotes inside the content
+            const escaped = content.replace(/(?<!\\)"/g, '\\"');
+            return `: "${escaped}"${ending}`;
+        })
+        // Remove any control characters except newlines in strings
+        .replace(/[\x00-\x09\x0B\x0C\x0E-\x1F]/g, ' ')
+        // Trim whitespace
+        .trim();
+}
+
+// More aggressive JSON cleaning for stubborn cases
+function aggressiveJSONClean(jsonStr) {
+    // Try to extract just the array
+    const arrayMatch = jsonStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (!arrayMatch) {
+        throw new Error('Impossible de trouver un tableau JSON valide');
+    }
+    
+    let cleaned = arrayMatch[0];
+    
+    // Replace problematic characters
+    cleaned = cleaned
+        // Smart quotes to regular quotes
+        .replace(/[""]/g, '"')
+        .replace(/['']/g, "'")
+        // Remove zero-width characters
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        // Fix escaped newlines in strings
+        .replace(/\n/g, '\\n')
+        // Remove trailing commas
+        .replace(/,\s*([\]}])/g, '$1');
+    
+    return cleaned;
 }
 
 // Display Generated Posts
