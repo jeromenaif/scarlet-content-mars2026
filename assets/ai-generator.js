@@ -1,11 +1,15 @@
 // AI Generator Script for Scarlet Content Factory
 // Using Anthropic API (Claude)
+// Version 2.0 - Avec historique et export Excel
 
 let currentMode = null;
 let generatedPosts = [];
 
 // Cloudflare Worker proxy URL (clé API sécurisée côté serveur)
 const PROXY_URL = 'https://scarlet-proxy.naifjerome.workers.dev';
+
+// Storage key for localStorage
+const STORAGE_KEY = 'scarlet_generated_posts_history';
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
@@ -15,7 +19,45 @@ document.addEventListener('DOMContentLoaded', () => {
         statusElement.className = 'api-status configured';
         statusElement.innerHTML = '✅ API configurée';
     }
+    
+    // Load history count
+    updateHistoryBadge();
 });
+
+// Get dynamic month options based on current date
+function getMonthOptions() {
+    const months = [
+        'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const options = [];
+    
+    // Generate 6 months starting from current month
+    for (let i = 0; i < 6; i++) {
+        const monthIndex = (currentMonth + i) % 12;
+        const year = currentYear + Math.floor((currentMonth + i) / 12);
+        const value = `${months[monthIndex].toLowerCase()}-${year}`;
+        const label = `${months[monthIndex]} ${year}`;
+        options.push({ value, label });
+    }
+    
+    return options;
+}
+
+// Update history badge
+function updateHistoryBadge() {
+    const history = getGenerationHistory();
+    const badge = document.getElementById('historyBadge');
+    if (badge) {
+        badge.textContent = history.length;
+        badge.style.display = history.length > 0 ? 'inline-flex' : 'none';
+    }
+}
 
 // Mode Selection
 function selectMode(mode) {
@@ -39,6 +81,7 @@ function showGenerationForm(mode) {
     
     switch(mode) {
         case 'full':
+            const monthOptions = getMonthOptions();
             formHTML = `
                 <div class="config-section">
                     <h3>🚀 Génération Complète du Mois</h3>
@@ -46,9 +89,9 @@ function showGenerationForm(mode) {
                     <div class="form-group">
                         <label>Mois à générer</label>
                         <select class="form-input" id="monthSelect">
-                            <option value="avril-2026">Avril 2026</option>
-                            <option value="mai-2026">Mai 2026</option>
-                            <option value="juin-2026">Juin 2026</option>
+                            ${monthOptions.map((opt, i) => `
+                                <option value="${opt.value}" ${i === 0 ? 'selected' : ''}>${opt.label}</option>
+                            `).join('')}
                         </select>
                     </div>
                     
@@ -167,9 +210,71 @@ function showGenerationForm(mode) {
                 </div>
             `;
             break;
+            
+        case 'history':
+            formHTML = buildHistoryView();
+            break;
     }
     
     formsContainer.innerHTML = formHTML;
+}
+
+// Build History View
+function buildHistoryView() {
+    const history = getGenerationHistory();
+    
+    if (history.length === 0) {
+        return `
+            <div class="config-section">
+                <h3>📚 Historique des Générations</h3>
+                <div class="status-message">
+                    <div class="status-icon">📭</div>
+                    <div>Aucune génération sauvegardée</div>
+                    <p style="margin-top: 12px; color: var(--text-muted); font-size: 14px;">
+                        Vos prochaines générations apparaîtront ici.
+                    </p>
+                </div>
+            </div>
+        `;
+    }
+    
+    const historyItems = history.map((item, index) => `
+        <div class="history-item" style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 16px; margin-bottom: 12px; border-left: 4px solid var(--scarlet-red);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <strong>${item.month || 'Génération'}</strong>
+                <span style="font-size: 12px; color: var(--text-muted);">${new Date(item.timestamp).toLocaleDateString('fr-BE')} à ${new Date(item.timestamp).toLocaleTimeString('fr-BE', {hour: '2-digit', minute: '2-digit'})}</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                ${item.posts.length} posts • Mode: ${item.mode || 'full'}
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-primary" onclick="loadFromHistory(${index})">
+                    👀 Voir
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="exportHistoryToExcel(${index})">
+                    📊 Excel
+                </button>
+                <button class="btn btn-sm btn-secondary" onclick="downloadHistoryAsJSON(${index})">
+                    💾 JSON
+                </button>
+                <button class="btn btn-sm" style="background: rgba(255,107,107,0.2); color: #ff6b6b;" onclick="deleteFromHistory(${index})">
+                    🗑️ Supprimer
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    return `
+        <div class="config-section">
+            <h3>📚 Historique des Générations</h3>
+            <div style="margin-bottom: 20px;">
+                <button class="btn btn-secondary" onclick="clearAllHistory()" style="background: rgba(255,107,107,0.2); color: #ff6b6b;">
+                    🗑️ Tout effacer
+                </button>
+            </div>
+            ${historyItems}
+        </div>
+    `;
 }
 
 // Update generate button label dynamically
@@ -188,6 +293,179 @@ function updateGenerateButton() {
     }
 }
 
+// ==================== STORAGE FUNCTIONS ====================
+
+function getGenerationHistory() {
+    try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : [];
+    } catch (e) {
+        console.error('Error loading history:', e);
+        return [];
+    }
+}
+
+function saveToHistory(posts, mode, month) {
+    try {
+        const history = getGenerationHistory();
+        history.unshift({
+            timestamp: Date.now(),
+            mode: mode,
+            month: month,
+            posts: posts
+        });
+        // Keep only last 20 generations
+        if (history.length > 20) {
+            history.pop();
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        updateHistoryBadge();
+    } catch (e) {
+        console.error('Error saving to history:', e);
+    }
+}
+
+function loadFromHistory(index) {
+    const history = getGenerationHistory();
+    if (history[index]) {
+        generatedPosts = history[index].posts;
+        displayGeneratedPosts(generatedPosts, history[index].mode || 'full');
+    }
+}
+
+function deleteFromHistory(index) {
+    if (confirm('Supprimer cette génération ?')) {
+        const history = getGenerationHistory();
+        history.splice(index, 1);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+        updateHistoryBadge();
+        showGenerationForm('history');
+    }
+}
+
+function clearAllHistory() {
+    if (confirm('Supprimer tout l\'historique ?')) {
+        localStorage.removeItem(STORAGE_KEY);
+        updateHistoryBadge();
+        showGenerationForm('history');
+    }
+}
+
+function downloadHistoryAsJSON(index) {
+    const history = getGenerationHistory();
+    if (history[index]) {
+        const dataStr = JSON.stringify(history[index].posts, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `scarlet-posts-${history[index].month || 'export'}-${Date.now()}.json`;
+        link.click();
+    }
+}
+
+function exportHistoryToExcel(index) {
+    const history = getGenerationHistory();
+    if (history[index]) {
+        exportToExcel(history[index].posts, history[index].month);
+    }
+}
+
+// ==================== EXCEL EXPORT ====================
+
+function exportToExcel(posts, monthLabel) {
+    // Create workbook data
+    const headers = [
+        'N°', 'Date', 'Thème', 'Format', 'Pilier', 'Angle/Reasoning',
+        'Caption FR', 'Caption NL', 'Texte visuel FR', 'Texte visuel NL', 'Brief visuel'
+    ];
+    
+    const rows = posts.map((post, idx) => {
+        // Extract visual text
+        let visualFR = '';
+        let visualNL = '';
+        let brief = '';
+        
+        const dataFR = post.data?.fr || {};
+        const dataNL = post.data?.nl || {};
+        
+        if (Array.isArray(dataFR)) {
+            visualFR = dataFR.join('\n');
+            visualNL = Array.isArray(dataNL) ? dataNL.join('\n') : '';
+        } else {
+            const frParts = [];
+            const nlParts = [];
+            
+            for (const [key, value] of Object.entries(dataFR)) {
+                if (key === 'image_description') {
+                    brief = value;
+                } else if (Array.isArray(value)) {
+                    if (value[0] && typeof value[0] === 'object') {
+                        value.forEach(seg => frParts.push(`${seg.label || ''}: ${seg.value || ''}%`));
+                    } else {
+                        frParts.push(value.join('\n'));
+                    }
+                } else if (typeof value === 'string') {
+                    frParts.push(value);
+                }
+            }
+            
+            for (const [key, value] of Object.entries(dataNL)) {
+                if (key !== 'image_description') {
+                    if (Array.isArray(value)) {
+                        if (value[0] && typeof value[0] === 'object') {
+                            value.forEach(seg => nlParts.push(`${seg.label || ''}: ${seg.value || ''}%`));
+                        } else {
+                            nlParts.push(value.join('\n'));
+                        }
+                    } else if (typeof value === 'string') {
+                        nlParts.push(value);
+                    }
+                }
+            }
+            
+            visualFR = frParts.join('\n');
+            visualNL = nlParts.join('\n');
+        }
+        
+        return [
+            idx + 1,
+            post.date || '',
+            post.theme || '',
+            post.format || '',
+            post.pilier || '',
+            post.angle || post.reasoning || post.variation || '',
+            post.captions?.fr || '',
+            post.captions?.nl || '',
+            visualFR,
+            visualNL,
+            brief
+        ];
+    });
+    
+    // Build CSV content (Excel-compatible with BOM for UTF-8)
+    const BOM = '\uFEFF';
+    const csvContent = [
+        headers.join(';'),
+        ...rows.map(row => row.map(cell => {
+            // Escape quotes and wrap in quotes if contains special chars
+            const str = String(cell).replace(/"/g, '""');
+            return `"${str}"`;
+        }).join(';'))
+    ].join('\n');
+    
+    // Download as CSV (Excel will open it correctly)
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Scarlet_Posts_${monthLabel || 'export'}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+// ==================== GENERATION FUNCTIONS ====================
+
 // Generate Full Month
 async function generateFull() {
     const postCountInput = document.getElementById('postCount');
@@ -198,6 +476,8 @@ async function generateFull() {
         return;
     }
     const month = document.getElementById('monthSelect').value;
+    const monthLabel = document.getElementById('monthSelect').options[document.getElementById('monthSelect').selectedIndex].text;
+    
     const options = {
         analyzeHistory: document.getElementById('analyzeHistory').checked,
         belgianTrends: document.getElementById('belgianTrends').checked,
@@ -205,7 +485,7 @@ async function generateFull() {
         varyFormats: document.getElementById('varyFormats').checked
     };
     
-    showLoading(`Génération de ${postCount} posts pour ${month}...`);
+    showLoading(`Génération de ${postCount} posts pour ${monthLabel}...`);
     
     try {
         // Analyze history
@@ -216,6 +496,9 @@ async function generateFull() {
         
         // Call API
         const result = await callClaudeAPI(prompt);
+        
+        // Save to history
+        saveToHistory(result, 'full', monthLabel);
         
         // Parse and display results
         displayGeneratedPosts(result, 'full');
@@ -241,6 +524,10 @@ async function generateIdeation() {
         const insights = analyzeHistory();
         const prompt = buildIdeationPrompt(theme, pilier, insights);
         const result = await callClaudeAPI(prompt);
+        
+        // Save to history
+        saveToHistory(result, 'ideation', `Idéation: ${theme}`);
+        
         displayGeneratedPosts(result, 'ideation');
     } catch (error) {
         showError(`Erreur lors de la génération: ${error.message}`);
@@ -264,6 +551,10 @@ async function generateImprovement() {
         const insights = analyzeHistory();
         const prompt = buildImprovementPrompt(post, improvements, insights);
         const result = await callClaudeAPI(prompt);
+        
+        // Save to history
+        saveToHistory(result, 'improve', `Amélioration: ${post.theme}`);
+        
         displayGeneratedPosts(result, 'improve');
     } catch (error) {
         showError(`Erreur lors de la génération: ${error.message}`);
@@ -563,9 +854,12 @@ function displayGeneratedPosts(posts, mode) {
         <div class="preview-grid">
             ${postsHTML}
         </div>
-        <div style="margin-top: 30px; text-align: center;">
-            <button class="btn btn-primary" onclick="downloadAsJSON()">
-                💾 Télécharger en JSON
+        <div style="margin-top: 30px; text-align: center; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="exportToExcel(generatedPosts, '${new Date().toLocaleDateString('fr-BE')}')">
+                📊 Télécharger Excel
+            </button>
+            <button class="btn btn-secondary" onclick="downloadAsJSON()">
+                💾 Télécharger JSON
             </button>
             <button class="btn btn-secondary" onclick="copyToClipboard()">
                 📋 Copier le code
