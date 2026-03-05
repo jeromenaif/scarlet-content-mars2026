@@ -1,6 +1,6 @@
 // ==================== PUBLISHED POSTS LOADER ====================
-// Ajouter ce code à votre page d'aperçu (index.html) pour charger les posts publiés
-// depuis le générateur IA
+// Charge les posts publiés depuis le générateur IA et les fusionne avec POSTS_DATA
+// Version 1.0
 
 const PUBLISHED_POSTS_KEY = 'scarlet_published_posts';
 
@@ -19,17 +19,36 @@ function getPublishedPosts() {
 
 /**
  * Fusionne POSTS_DATA avec les posts publiés
- * Les posts publiés sont ajoutés au début
+ * Les posts publiés sont ajoutés au début avec des IDs uniques
  */
 function getAllPosts() {
     const published = getPublishedPosts();
     
-    // Si POSTS_DATA existe, fusionner
-    if (typeof POSTS_DATA !== 'undefined') {
-        return [...published, ...POSTS_DATA];
-    }
+    // Assigner des IDs uniques aux posts publiés s'ils n'en ont pas de numériques
+    const maxExistingId = POSTS_DATA.reduce((max, p) => Math.max(max, p.id || 0), 0);
     
-    return published;
+    const publishedWithIds = published.map((post, index) => ({
+        ...post,
+        id: post.id || (maxExistingId + index + 1),
+        formatLabel: post.formatLabel || getFormatLabel(post.format),
+        isGenerated: true
+    }));
+    
+    // Posts publiés en premier, puis les existants
+    return [...publishedWithIds, ...POSTS_DATA];
+}
+
+/**
+ * Génère le label de format si manquant
+ */
+function getFormatLabel(format) {
+    const labels = {
+        'pie_chart': '📊 Pie Chart',
+        'meme': '😂 Meme',
+        'checklist': '✅ Checklist',
+        'poll': '📊 Poll'
+    };
+    return labels[format] || format;
 }
 
 /**
@@ -46,7 +65,10 @@ function removePublishedPost(postId) {
  * Vide tous les posts publiés
  */
 function clearAllPublishedPosts() {
-    localStorage.removeItem(PUBLISHED_POSTS_KEY);
+    if (confirm('⚠️ Supprimer tous les posts générés par l\'IA de la vue d\'ensemble ?')) {
+        localStorage.removeItem(PUBLISHED_POSTS_KEY);
+        location.reload();
+    }
 }
 
 /**
@@ -56,71 +78,10 @@ function getPublishedPostsCount() {
     return getPublishedPosts().length;
 }
 
-// ==================== INTÉGRATION AUTOMATIQUE ====================
-
-// Cette fonction met à jour automatiquement l'affichage si vous utilisez
-// une variable POSTS_DATA dans votre page d'aperçu
-
-(function initPublishedPostsLoader() {
-    // Attendre que la page soit chargée
-    document.addEventListener('DOMContentLoaded', function() {
-        const publishedCount = getPublishedPostsCount();
-        
-        if (publishedCount > 0) {
-            console.log(`📥 ${publishedCount} posts publiés chargés depuis le générateur IA`);
-            
-            // Optionnel : afficher un badge ou notification
-            showPublishedPostsBadge(publishedCount);
-        }
-        
-        // Si votre page utilise POSTS_DATA, le remplacer par la version fusionnée
-        if (typeof POSTS_DATA !== 'undefined' && typeof window.initializePosts === 'function') {
-            // Si vous avez une fonction d'initialisation, l'appeler avec les posts fusionnés
-            window.POSTS_DATA = getAllPosts();
-            window.initializePosts();
-        }
-    });
-})();
-
-/**
- * Affiche un badge indiquant le nombre de posts publiés
- */
-function showPublishedPostsBadge(count) {
-    // Chercher un élément pour afficher le badge
-    const headerEl = document.querySelector('header, .header, h1');
-    
-    if (headerEl && count > 0) {
-        const badge = document.createElement('span');
-        badge.className = 'published-badge';
-        badge.innerHTML = `🤖 ${count} posts IA`;
-        badge.style.cssText = `
-            background: linear-gradient(135deg, #e63946, #ff6b6b);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            margin-left: 12px;
-            font-weight: 500;
-        `;
-        badge.title = 'Posts générés par l\'IA et publiés vers l\'aperçu';
-        
-        // Ajouter après le titre principal
-        if (!document.querySelector('.published-badge')) {
-            headerEl.appendChild(badge);
-        }
+// Log au chargement
+(function() {
+    const count = getPublishedPostsCount();
+    if (count > 0) {
+        console.log(`🤖 ${count} posts IA chargés depuis le générateur`);
     }
-}
-
-// ==================== EXEMPLE D'UTILISATION ====================
-
-/*
-// Dans votre code d'affichage des posts, remplacez :
-POSTS_DATA.forEach(post => { ... });
-
-// Par :
-getAllPosts().forEach(post => { ... });
-
-// Ou bien, au chargement de la page :
-const allPosts = getAllPosts();
-// Utilisez allPosts au lieu de POSTS_DATA
-*/
+})();
