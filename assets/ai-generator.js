@@ -866,6 +866,32 @@ ${insights.insights}
 3. **Varier les formats** : Privilégier meme et poll
 4. **Éviter les répétitions** : Thèmes différents des posts déjà générés
 
+## STRUCTURE "data" PAR FORMAT (OBLIGATOIRE)
+
+Pour format "meme":
+"data": {
+  "fr": { "topText": "Texte du haut FR", "bottomText": "Texte du bas FR" },
+  "nl": { "topText": "Texte du haut NL", "bottomText": "Texte du bas NL" }
+}
+
+Pour format "pie_chart":
+"data": {
+  "fr": { "chartTitle": "Titre FR", "legends": ["Label 1", "Label 2"], "percentages": [30, 70] },
+  "nl": { "chartTitle": "Titre NL", "legends": ["Label 1 NL", "Label 2 NL"], "percentages": [30, 70] }
+}
+
+Pour format "checklist":
+"data": {
+  "fr": { "checklistTitle": "Titre FR", "items": ["Item 1", "Item 2", "Item 3"] },
+  "nl": { "checklistTitle": "Titre NL", "items": ["Item 1 NL", "Item 2 NL", "Item 3 NL"] }
+}
+
+Pour format "poll":
+"data": {
+  "fr": { "question": "Question FR ?", "options": ["Option 1", "Option 2"] },
+  "nl": { "question": "Question NL ?", "options": ["Optie 1", "Optie 2"] }
+}
+
 ## FORMAT DE SORTIE
 
 Génère ${postCount} concepts de posts au format JSON:
@@ -880,8 +906,8 @@ Génère ${postCount} concepts de posts au format JSON:
     "objectif_media": "REACH|ENGAGEMENT",
     "objectif_justification": "Pourquoi cet objectif (court)",
     "data": {
-      "fr": { ... },
-      "nl": { ... }
+      "fr": { ... selon le format ci-dessus ... },
+      "nl": { ... selon le format ci-dessus ... }
     },
     "captions": {
       "fr": "Caption FR (2 phrases max)",
@@ -892,7 +918,9 @@ Génère ${postCount} concepts de posts au format JSON:
 ]
 \`\`\`
 
-IMPORTANT: Retourne UNIQUEMENT le JSON valide, sans texte avant ou après.`;
+IMPORTANT: 
+- Retourne UNIQUEMENT le JSON valide, sans texte avant ou après.
+- CHAQUE POST DOIT avoir les champs "data" COMPLETS selon son format.`;
 }
 
 // Generate Ideation
@@ -1005,6 +1033,32 @@ ${insights.insights}
 3. **Éviter les répétitions** : Ne pas réutiliser les thèmes récents
 4. **Posts calendaires** : Si événement du mois, ajouter un angle comportemental
 
+## STRUCTURE "data" PAR FORMAT (OBLIGATOIRE)
+
+Pour format "meme":
+"data": {
+  "fr": { "topText": "Texte du haut FR", "bottomText": "Texte du bas FR" },
+  "nl": { "topText": "Texte du haut NL", "bottomText": "Texte du bas NL" }
+}
+
+Pour format "pie_chart":
+"data": {
+  "fr": { "chartTitle": "Titre FR", "legends": ["Label 1", "Label 2"], "percentages": [30, 70] },
+  "nl": { "chartTitle": "Titre NL", "legends": ["Label 1 NL", "Label 2 NL"], "percentages": [30, 70] }
+}
+
+Pour format "checklist":
+"data": {
+  "fr": { "checklistTitle": "Titre FR", "items": ["Item 1", "Item 2", "Item 3"] },
+  "nl": { "checklistTitle": "Titre NL", "items": ["Item 1 NL", "Item 2 NL", "Item 3 NL"] }
+}
+
+Pour format "poll":
+"data": {
+  "fr": { "question": "Question FR ?", "options": ["Option 1", "Option 2"] },
+  "nl": { "question": "Question NL ?", "options": ["Optie 1", "Optie 2"] }
+}
+
 ## FORMAT DE SORTIE
 
 Génère ${postCount} concepts de posts complets au format JSON suivant:
@@ -1019,8 +1073,8 @@ Génère ${postCount} concepts de posts complets au format JSON suivant:
     "objectif_media": "REACH|ENGAGEMENT",
     "objectif_justification": "Pourquoi cet objectif pour ce contenu (1 phrase)",
     "data": {
-      "fr": { ... },
-      "nl": { ... }
+      "fr": { ... selon le format ci-dessus ... },
+      "nl": { ... selon le format ci-dessus ... }
     },
     "captions": {
       "fr": "Caption FR (2-3 phrases max, avec CTA adapté à l'objectif)",
@@ -1033,6 +1087,7 @@ Génère ${postCount} concepts de posts complets au format JSON suivant:
 
 IMPORTANT: 
 - Retourne UNIQUEMENT le JSON, sans texte avant ou après.
+- CHAQUE POST DOIT avoir les champs "data" COMPLETS selon son format.
 - Pour les posts ENGAGEMENT : inclure un CTA interactif (question, tag un ami, etc.)
 - Pour les posts REACH : inclure un CTA plus soft (découvrir, visiter, etc.)
 - RESPECTE TOUTES LES RÈGLES du FEEDBACK_LOG ci-dessus`;
@@ -1060,6 +1115,32 @@ Pour chaque angle :
 - Indique l'objectif média recommandé (REACH ou ENGAGEMENT)
 - Justifie pourquoi cet angle va performer
 
+## STRUCTURE "data" PAR FORMAT (OBLIGATOIRE)
+
+Pour format "meme":
+"data": {
+  "fr": { "topText": "Texte du haut FR", "bottomText": "Texte du bas FR" },
+  "nl": { "topText": "Texte du haut NL", "bottomText": "Texte du bas NL" }
+}
+
+Pour format "pie_chart":
+"data": {
+  "fr": { "chartTitle": "Titre FR", "legends": ["Label 1", "Label 2"], "percentages": [30, 70] },
+  "nl": { "chartTitle": "Titre NL", "legends": ["Label 1 NL", "Label 2 NL"], "percentages": [30, 70] }
+}
+
+Pour format "checklist":
+"data": {
+  "fr": { "checklistTitle": "Titre FR", "items": ["Item 1", "Item 2", "Item 3"] },
+  "nl": { "checklistTitle": "Titre NL", "items": ["Item 1 NL", "Item 2 NL", "Item 3 NL"] }
+}
+
+Pour format "poll":
+"data": {
+  "fr": { "question": "Question FR ?", "options": ["Option 1", "Option 2"] },
+  "nl": { "question": "Question NL ?", "options": ["Optie 1", "Optie 2"] }
+}
+
 Génère 3 concepts au format JSON suivant:
 
 \`\`\`json
@@ -1072,8 +1153,8 @@ Génère 3 concepts au format JSON suivant:
     "objectif_media": "REACH|ENGAGEMENT",
     "objectif_justification": "Pourquoi cet objectif",
     "data": {
-      "fr": { ... },
-      "nl": { ... }
+      "fr": { ... selon le format ci-dessus ... },
+      "nl": { ... selon le format ci-dessus ... }
     },
     "captions": {
       "fr": "Caption FR",
@@ -1085,6 +1166,7 @@ Génère 3 concepts au format JSON suivant:
 
 IMPORTANT: 
 - Retourne UNIQUEMENT le JSON, sans texte avant ou après.
+- CHAQUE POST DOIT avoir les champs "data" COMPLETS selon son format.
 - RESPECTE TOUTES LES RÈGLES du FEEDBACK_LOG ci-dessus`;
 }
 
